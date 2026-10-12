@@ -8558,18 +8558,55 @@
       this.j = new wl
     }
     H(a) {
-      // Advance moving blocks inside the existing collision step so their hitboxes and
-      // rendered positions stay synchronized. Bounds are world-space pixel coordinates.
-      for (const entity of this.O.find(MovingBlock, P)) {
+      // Move the platform in small, collision-aware steps. This keeps the original
+      // collision engine in charge of the player while the platform carries riders.
+      const movingEntities = this.O.find(MovingBlock, P, R);
+      const allSolid = this.O.find(R, P);
+      for (const entity of movingEntities) {
         const block = entity.get(MovingBlock);
-        const position = entity.get(P).position;
-        position.x += block.speed * block.direction * a;
-        if (position.x >= block.right) {
-          position.x = block.right;
-          block.direction = -1;
-        } else if (position.x <= block.left) {
-          position.x = block.left;
-          block.direction = 1;
+        const platformPos = entity.get(P).position;
+        const platformHit = entity.get(R);
+        const startX = platformPos.x;
+        const frameDelta = Math.max(-4, Math.min(4, block.speed * block.direction * a));
+        if (!frameDelta) continue;
+        const top = platformPos.y + platformHit.offset.y;
+        const bottom = top + platformHit.size.y;
+        const riders = [];
+        for (const other of allSolid) {
+          if (other === entity || !other.get(S) || !other.get(P)) continue;
+          const op = other.get(P).position, oh = other.get(R);
+          if (!oh) continue;
+          const otherBottom = op.y + oh.offset.y + oh.size.y;
+          const otherLeft = op.x + oh.offset.x, otherRight = otherLeft + oh.size.x;
+          const platLeft = platformPos.x + platformHit.offset.x, platRight = platLeft + platformHit.size.x;
+          if (Math.abs(otherBottom - top) <= 2 && otherRight > platLeft + 1 && otherLeft < platRight - 1) riders.push(other);
+        }
+        let nextX = platformPos.x + frameDelta;
+        let hitWall = false;
+        for (const other of allSolid) {
+          if (other === entity || !other.get(P) || !other.get(R)) continue;
+          const op = other.get(P).position, oh = other.get(R);
+          const otherTop = op.y + oh.offset.y, otherBottom = otherTop + oh.size.y;
+          if (bottom <= otherTop + 0.5 || top >= otherBottom - 0.5) continue;
+          const otherLeft = op.x + oh.offset.x, otherRight = otherLeft + oh.size.x;
+          const oldLeft = platformPos.x + platformHit.offset.x, oldRight = oldLeft + platformHit.size.x;
+          const newLeft = nextX + platformHit.offset.x, newRight = newLeft + platformHit.size.x;
+          if (frameDelta > 0 && oldRight <= otherLeft + 0.5 && newRight > otherLeft) {
+            nextX = otherLeft - platformHit.offset.x - platformHit.size.x; hitWall = true; break;
+          }
+          if (frameDelta < 0 && oldLeft >= otherRight - 0.5 && newLeft < otherRight) {
+            nextX = otherRight - platformHit.offset.x; hitWall = true; break;
+          }
+        }
+        // Keep the patrol limits as a fallback; obstacles reverse it immediately.
+        if (nextX >= block.right) { nextX = block.right; hitWall = true; }
+        if (nextX <= block.left) { nextX = block.left; hitWall = true; }
+        const deltaX = nextX - startX;
+        platformPos.x = nextX;
+        if (hitWall) block.direction *= -1;
+        if (deltaX) for (const rider of riders) {
+          const rp = rider.get(P).position;
+          rp.x += deltaX;
         }
       }
       const b = this.O.find(R);
@@ -18590,7 +18627,7 @@
           <ddl-sprite-button type='edit'
             id='edit-button'
             @click=
-      ${ () => this.Ma() }
+      ${ (event) => { event.preventDefault(); event.stopPropagation(); Y(this, 'change-mode-edit'); Y(this, 'snap-editor-camera'); } }
             title=
       ${ W('button_edit_game') }>
           <div id='edit-container'>
@@ -18603,7 +18640,7 @@
           <ddl-sprite-button type='play'
             id='play-button'
             @click=
-      ${ () => this.Wa() }
+      ${ (event) => { event.preventDefault(); event.stopPropagation(); Y(this, 'change-mode-play'); } }
             title=
       ${ W('button_play_game') }>
             <div id='play-container'>
@@ -18794,8 +18831,15 @@
       left: 60px;
       width: 90px;
       height: 21px;
-      z-index: 10;
+      z-index: 1000;
       pointer-events: auto;
+      cursor: pointer;
+    }
+
+    .cartridges,
+    .cartridges-title,
+    .scrollBar {
+      z-index: 1;
     }
 
     #edit-button {
