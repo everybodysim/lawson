@@ -8681,21 +8681,37 @@
       super(); this.left = left; this.right = right; this.speed = speed; this.direction = 1;
     }
   };
-  var movingBlockImage = new Image();
-  movingBlockImage.src = './assets/moving-block.png';
+  // One sprite per original Doodle art style. Missing files fall back to a crisp pixel-art tile.
+  var movingBlockImages = {
+    1: new Image(), 2: new Image(), 3: new Image(), 4: new Image(), 5: new Image()
+  };
+  movingBlockImages[1].src = './assets/moving-block-n8.png';
+  movingBlockImages[2].src = './assets/moving-block-n16.png';
+  movingBlockImages[3].src = './assets/moving-block-l.png';
+  movingBlockImages[4].src = './assets/moving-block-m.png';
+  movingBlockImages[5].src = './assets/moving-block-d.png';
   function drawMovingBlock(ctx) {
-    ctx.save(); ctx.imageSmoothingEnabled = false;
-    if (movingBlockImage.complete && movingBlockImage.naturalWidth > 0) {
-      ctx.drawImage(movingBlockImage, 0, 0, 16, 16);
+    ctx.save();
+    ctx.imageSmoothingEnabled = false;
+    var sprite = movingBlockImages[Qg] || movingBlockImages[1];
+    if (sprite.complete && sprite.naturalWidth > 0) {
+      ctx.drawImage(sprite, 0, 0, 16, 16);
     } else {
-      // Pixelated placeholder disappears automatically when assets/moving-block.png loads.
-      ctx.fillStyle = '#18233d'; ctx.fillRect(0, 0, 16, 16);
-      ctx.fillStyle = '#4b6a9b'; ctx.fillRect(1, 1, 14, 3);
-      ctx.fillStyle = '#82baff'; ctx.fillRect(2, 4, 12, 2);
-      ctx.fillStyle = '#5275aa'; ctx.fillRect(1, 6, 14, 7);
-      ctx.fillStyle = '#a9d9ff'; ctx.fillRect(3, 7, 3, 2); ctx.fillRect(10, 7, 3, 2);
-      ctx.fillStyle = '#30466f'; ctx.fillRect(0, 13, 16, 3);
-      ctx.fillStyle = '#d4edff'; ctx.fillRect(2, 14, 3, 1); ctx.fillRect(11, 14, 3, 1);
+      // Style-tinted pixel placeholder is replaced automatically by that style's PNG.
+      var palette = {
+        1: ['#18233d', '#4b6a9b', '#82baff', '#5275aa', '#a9d9ff', '#30466f'],
+        2: ['#202020', '#555555', '#dddddd', '#888888', '#ffffff', '#333333'],
+        3: ['#39251d', '#865333', '#d5a15d', '#a96c38', '#ffe0a0', '#5a3827'],
+        4: ['#182b20', '#39744a', '#73bf72', '#4c985c', '#c5ffc0', '#244a31'],
+        5: ['#281b3e', '#6947a1', '#ba83ff', '#8559ca', '#f0d6ff', '#402d64']
+      }[Qg] || ['#18233d', '#4b6a9b', '#82baff', '#5275aa', '#a9d9ff', '#30466f'];
+      ctx.fillStyle = palette[0]; ctx.fillRect(0, 0, 16, 16);
+      ctx.fillStyle = palette[1]; ctx.fillRect(1, 1, 14, 3);
+      ctx.fillStyle = palette[2]; ctx.fillRect(2, 4, 12, 2);
+      ctx.fillStyle = palette[3]; ctx.fillRect(1, 6, 14, 7);
+      ctx.fillStyle = palette[4]; ctx.fillRect(3, 7, 3, 2); ctx.fillRect(10, 7, 3, 2);
+      ctx.fillStyle = palette[5]; ctx.fillRect(0, 13, 16, 3);
+      ctx.fillStyle = palette[4]; ctx.fillRect(2, 14, 3, 1); ctx.fillRect(11, 14, 3, 1);
     }
     ctx.restore();
   }
@@ -16540,7 +16556,7 @@
     paddleVertical: 'tool_paddle_vertical',
     ball: 'tool_ball',
     solid: 'tool_solid',
-    movingBlock: 'tool_falling_solid',
+    movingBlock: 'tool_moving_block',
     breakable: 'tool_breakable',
     goal: 'tool_goal',
     coin: 'tool_coin',
@@ -17849,6 +17865,7 @@
         'ball'],
         [
           'solid',
+          'movingBlock',
           'breakable',
           'pushableSolid',
           'fire'
