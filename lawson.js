@@ -18576,7 +18576,7 @@
           <ddl-sprite-button type='edit'
             id='edit-button'
             @click=
-      ${ this.Ma }
+      ${ this.Wa }
             title=
       ${ W('button_edit_game') }>
           <div id='edit-container'>
@@ -18589,7 +18589,7 @@
           <ddl-sprite-button type='play'
             id='play-button'
             @click=
-      ${ this.Wa }
+      ${ this.Fg }
             title=
       ${ W('button_play_game') }>
             <div id='play-container'>
