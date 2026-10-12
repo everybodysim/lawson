@@ -8573,7 +8573,7 @@
         const bottom = top + platformHit.size.y;
         const riders = [];
         for (const other of allSolid) {
-          if (other === entity || !other.get(S) || !other.get(P)) continue;
+          if (other === entity || !other.Rc.has(S)) continue;
           const op = other.get(P).position, oh = other.get(R);
           if (!oh) continue;
           const otherBottom = op.y + oh.offset.y + oh.size.y;
@@ -8598,9 +8598,7 @@
             nextX = otherRight - platformHit.offset.x; hitWall = true; break;
           }
         }
-        // Keep the patrol limits as a fallback; obstacles reverse it immediately.
-        if (nextX >= block.right) { nextX = block.right; hitWall = true; }
-        if (nextX <= block.left) { nextX = block.left; hitWall = true; }
+        // No artificial travel limit: reverse only when a solid obstacle is hit.
         const deltaX = nextX - startX;
         platformPos.x = nextX;
         if (hitWall) block.direction *= -1;
