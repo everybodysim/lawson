@@ -8675,7 +8675,32 @@
   function Dl(a) {
     return Bl(a.T, a.Ca, 1)
   }
+  // Mod tile: solid pixel-art platform that patrols horizontally and reverses at its limits.
+  var MovingBlock = class extends u {
+    constructor(x, left, right, speed = 0.075) {
+      super(); this.left = left; this.right = right; this.speed = speed; this.direction = 1;
+    }
+  };
+  var movingBlockImage = new Image();
+  movingBlockImage.src = './assets/moving-block.png';
+  function drawMovingBlock(ctx) {
+    ctx.save(); ctx.imageSmoothingEnabled = false;
+    if (movingBlockImage.complete && movingBlockImage.naturalWidth > 0) {
+      ctx.drawImage(movingBlockImage, 0, 0, 16, 16);
+    } else {
+      // Pixelated placeholder disappears automatically when assets/moving-block.png loads.
+      ctx.fillStyle = '#18233d'; ctx.fillRect(0, 0, 16, 16);
+      ctx.fillStyle = '#4b6a9b'; ctx.fillRect(1, 1, 14, 3);
+      ctx.fillStyle = '#82baff'; ctx.fillRect(2, 4, 12, 2);
+      ctx.fillStyle = '#5275aa'; ctx.fillRect(1, 6, 14, 7);
+      ctx.fillStyle = '#a9d9ff'; ctx.fillRect(3, 7, 3, 2); ctx.fillRect(10, 7, 3, 2);
+      ctx.fillStyle = '#30466f'; ctx.fillRect(0, 13, 16, 3);
+      ctx.fillStyle = '#d4edff'; ctx.fillRect(2, 14, 3, 1); ctx.fillRect(11, 14, 3, 1);
+    }
+    ctx.restore();
+  }
   var T = new Map;
+  T.set(30, (a, b) => new x(new P(new C(a, b), 0, new C(O, O)), new D(new Na(drawMovingBlock), 0), new R(new C(16, 16)), new S(new C(0.075, 0)), new MovingBlock(a, a - 48, a + 48)));
   T.set(5, (a, b) =>{
     const c = G();
     return new x(new P(new C(a, b), 0, new C(O, O)), ...Cl(c.Na, 0), new R(new C(16, 16)))
@@ -15671,6 +15696,7 @@
     paddleVertical: yf,
     ball: jf,
     solid: Cf,
+    movingBlock: [0, 161, 1609, 20, 20],
     breakable: Ff,
     goal: uf,
     coin: lf,
@@ -15828,6 +15854,9 @@
         20,
         20
       ]
+    },
+    movingBlock: {
+      N: [0, 161, 1609, 20, 20], Aa: [0, 1372, 1612, 20, 20], active: [0, 357, 1609, 20, 20]
     },
     solid: {
       N: [
@@ -16473,6 +16502,7 @@
     paddleVertical: 29,
     ball: 4,
     solid: 5,
+    movingBlock: 30,
     breakable: 6,
     goal: 7,
     coin: 9,
@@ -16510,6 +16540,7 @@
     paddleVertical: 'tool_paddle_vertical',
     ball: 'tool_ball',
     solid: 'tool_solid',
+    movingBlock: 'tool_falling_solid',
     breakable: 'tool_breakable',
     goal: 'tool_goal',
     coin: 'tool_coin',
@@ -17623,6 +17654,7 @@
         new ps(this.O, e),
         new ms(this.O, c),
         new rs(this.O, e),
+        new MovingBlockSystem(this.O),
         f,
         new io(this.O, f),
         new ts(this.O, this),
@@ -20633,6 +20665,19 @@
     c = b - a.v;
     0 > c || (c = Math.min(c, 50), a.v = b, a.H(c))
   }
+  var MovingBlockSystem = class extends Da {
+    H() {
+      for (const entity of this.O.find(MovingBlock)) {
+        const block = entity.get(MovingBlock);
+        const pos = entity.get(P).position;
+        const velocity = entity.get(S).wa;
+        if (pos.x >= block.right) block.direction = -1;
+        else if (pos.x <= block.left) block.direction = 1;
+        velocity.x = block.speed * block.direction;
+        velocity.y = 0;
+      }
+    }
+  };
   var du = class {
     constructor(a) {
       this.H = a;
