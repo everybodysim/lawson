@@ -15712,7 +15712,7 @@
     paddleVertical: yf,
     ball: jf,
     solid: Cf,
-    movingBlock: [0, 161, 1609, 20, 20],
+    movingBlock: sf,
     breakable: Ff,
     goal: uf,
     coin: lf,
@@ -15872,7 +15872,9 @@
       ]
     },
     movingBlock: {
-      N: [0, 161, 1609, 20, 20], Aa: [0, 1372, 1612, 20, 20], active: [0, 357, 1609, 20, 20]
+      N: [0, 1428, 1514, 20, 20],
+      Aa: [0, 1428, 1537, 20, 20],
+      active: [0, 1451, 1521, 20, 20]
     },
     solid: {
       N: [
