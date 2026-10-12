@@ -1,14 +1,17 @@
-# Mod asset guide
+# Moving Block assets
 
-## Moving block
+The Moving Block uses a separate sprite for each of the five original Doodle art styles. Add these files when you have the art ready:
 
-The moving block currently draws a built-in pixel-art placeholder. To replace it, add:
+| Game style | File |
+|---|---|
+| N8 | `assets/moving-block-n8.png` |
+| N16 | `assets/moving-block-n16.png` |
+| L | `assets/moving-block-l.png` |
+| M | `assets/moving-block-m.png` |
+| D | `assets/moving-block-d.png` |
 
-- `assets/moving-block.png`
-- PNG with transparency
-- Recommended size: **16 × 16 pixels** (the game renders it at 16 × 16)
-- Style: crisp pixel art, readable outline, cool blue/steel platform colors
+**Each image:** transparent PNG, ideally 16 × 16 pixels, crisp pixel art with no smoothing. Keep the silhouette and collision shape consistent across all five styles.
 
-The game automatically uses this image when it loads successfully; otherwise the built-in pixelated placeholder stays visible. No code edits are needed when adding the PNG.
+Each style has its own built-in pixelated placeholder. The matching placeholder disappears automatically when its matching PNG loads; missing art for other styles continues to use its own placeholder. No code edits are required when you add these files.
 
-The moving block is a solid 16 × 16 tile. Its horizontal travel range is 3 tiles in either direction from where it was placed, and it reverses automatically at each end.
+The block is a 16 × 16 tile with a collision box and horizontal back-and-forth movement. Its patrol range is 48 pixels to either side of its placement point.
