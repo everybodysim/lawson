@@ -18789,8 +18789,13 @@
 
     #edit-button,
     #play-button {
+      display: block;
       position: absolute;
       left: 60px;
+      width: 90px;
+      height: 21px;
+      z-index: 10;
+      pointer-events: auto;
     }
 
     #edit-button {
