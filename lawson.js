@@ -8721,7 +8721,7 @@
     ctx.restore();
   }
   var T = new Map;
-  T.set(30, (a, b) => new x(new P(new C(a, b), 0, new C(O, O)), new D(new Na(drawMovingBlock), 0), new R(new C(16, 16)), new S(new C(0.075, 0)), new MovingBlock(a, a - 48, a + 48)));
+  T.set(30, (a, b) => new x(new P(new C(a, b), 0, new C(O, O)), new D(new Na(drawMovingBlock), 0), new R(new C(16, 16)), new MovingBlock(a, a - 48, a + 48)));
   T.set(5, (a, b) =>{
     const c = G();
     return new x(new P(new C(a, b), 0, new C(O, O)), ...Cl(c.Na, 0), new R(new C(16, 16)))
@@ -17677,7 +17677,6 @@
         new ps(this.O, e),
         new ms(this.O, c),
         new rs(this.O, e),
-        new MovingBlockSystem(this.O),
         f,
         new io(this.O, f),
         new ts(this.O, this),
@@ -20689,39 +20688,6 @@
     c = b - a.v;
     0 > c || (c = Math.min(c, 50), a.v = b, a.H(c))
   }
-  var MovingBlockSystem = class extends Da {
-    H() {
-      const colliders = this.O.find(R);
-      for (const entity of this.O.find(MovingBlock)) {
-        const block = entity.get(MovingBlock);
-        const pos = entity.get(P).position;
-        const hitbox = entity.get(R);
-        const velocity = entity.get(S).wa;
-        let left = block.left;
-        let right = block.right;
-        const top = pos.y + hitbox.offset.y;
-        const bottom = top + hitbox.size.y;
-        // If ordinary solid tiles flank this platform, patrol between their inner edges.
-        for (const other of colliders) {
-          if (other === entity || other.get(S)) continue;
-          const otherPos = other.get(P).position;
-          const otherBox = other.get(R);
-          const otherLeft = otherPos.x + otherBox.offset.x;
-          const otherRight = otherLeft + otherBox.size.x;
-          const otherTop = otherPos.y + otherBox.offset.y;
-          const otherBottom = otherTop + otherBox.size.y;
-          if (otherBottom <= top || otherTop >= bottom) continue;
-          if (otherRight <= block.origin && otherRight >= block.left) left = Math.max(left, otherRight);
-          if (otherLeft >= block.origin + hitbox.size.x && otherLeft <= block.right + hitbox.size.x) right = Math.min(right, otherLeft - hitbox.size.x);
-        }
-        if (right < left) left = right = block.origin;
-        if (pos.x >= right) block.direction = -1;
-        else if (pos.x <= left) block.direction = 1;
-        velocity.x = block.speed * block.direction;
-        velocity.y = 0;
-      }
-    }
-  };
   var du = class {
     constructor(a) {
       this.H = a;
