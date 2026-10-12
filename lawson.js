@@ -8735,42 +8735,28 @@
       this.direction = 1;
     }
   };
-  // One sprite per original Doodle art style. Missing files fall back to a crisp pixel-art tile.
-  var movingBlockImages = {
-    1: new Image(), 2: new Image(), 3: new Image(), 4: new Image(), 5: new Image()
-  };
-  movingBlockImages[1].src = './assets/moving-block-n8.png';
-  movingBlockImages[2].src = './assets/moving-block-n16.png';
-  movingBlockImages[3].src = './assets/moving-block-l.png';
-  movingBlockImages[4].src = './assets/moving-block-m.png';
-  movingBlockImages[5].src = './assets/moving-block-d.png';
+  // Temporary theme-aware pixel-art moving platform. Draw at 2x the standard 16px tile size.
   function drawMovingBlock(ctx) {
     ctx.save();
     ctx.imageSmoothingEnabled = false;
-    var sprite = movingBlockImages[Qg] || movingBlockImages[1];
-    if (sprite.complete && sprite.naturalWidth > 0) {
-      ctx.drawImage(sprite, 0, 0, 16, 16);
-    } else {
-      // Style-tinted pixel placeholder is replaced automatically by that style's PNG.
-      var palette = {
-        1: ['#18233d', '#4b6a9b', '#82baff', '#5275aa', '#a9d9ff', '#30466f'],
-        2: ['#202020', '#555555', '#dddddd', '#888888', '#ffffff', '#333333'],
-        3: ['#39251d', '#865333', '#d5a15d', '#a96c38', '#ffe0a0', '#5a3827'],
-        4: ['#182b20', '#39744a', '#73bf72', '#4c985c', '#c5ffc0', '#244a31'],
-        5: ['#281b3e', '#6947a1', '#ba83ff', '#8559ca', '#f0d6ff', '#402d64']
-      }[Qg] || ['#18233d', '#4b6a9b', '#82baff', '#5275aa', '#a9d9ff', '#30466f'];
-      ctx.fillStyle = palette[0]; ctx.fillRect(0, 0, 16, 16);
-      ctx.fillStyle = palette[1]; ctx.fillRect(1, 1, 14, 3);
-      ctx.fillStyle = palette[2]; ctx.fillRect(2, 4, 12, 2);
-      ctx.fillStyle = palette[3]; ctx.fillRect(1, 6, 14, 7);
-      ctx.fillStyle = palette[4]; ctx.fillRect(3, 7, 3, 2); ctx.fillRect(10, 7, 3, 2);
-      ctx.fillStyle = palette[5]; ctx.fillRect(0, 13, 16, 3);
-      ctx.fillStyle = palette[4]; ctx.fillRect(2, 14, 3, 1); ctx.fillRect(11, 14, 3, 1);
-    }
+    var palette = {
+      1: ['#18233d', '#4b6a9b', '#82baff', '#5275aa', '#a9d9ff', '#30466f'],
+      2: ['#202020', '#555555', '#dddddd', '#888888', '#ffffff', '#333333'],
+      3: ['#39251d', '#865333', '#d5a15d', '#a96c38', '#ffe0a0', '#5a3827'],
+      4: ['#182b20', '#39744a', '#73bf72', '#4c985c', '#c5ffc0', '#244a31'],
+      5: ['#281b3e', '#6947a1', '#ba83ff', '#8559ca', '#f0d6ff', '#402d64']
+    }[Qg] || ['#18233d', '#4b6a9b', '#82baff', '#5275aa', '#a9d9ff', '#30466f'];
+    ctx.fillStyle = palette[0]; ctx.fillRect(0, 0, 32, 32);
+    ctx.fillStyle = palette[1]; ctx.fillRect(2, 2, 28, 6);
+    ctx.fillStyle = palette[2]; ctx.fillRect(4, 8, 24, 4);
+    ctx.fillStyle = palette[3]; ctx.fillRect(2, 12, 28, 14);
+    ctx.fillStyle = palette[4]; ctx.fillRect(6, 14, 6, 4); ctx.fillRect(20, 14, 6, 4);
+    ctx.fillStyle = palette[5]; ctx.fillRect(0, 26, 32, 6);
+    ctx.fillStyle = palette[4]; ctx.fillRect(4, 28, 6, 2); ctx.fillRect(22, 28, 6, 2);
     ctx.restore();
   }
   var T = new Map;
-  T.set(30, (a, b) => new x(new P(new C(a, b), 0, new C(O, O)), new D(new Na(drawMovingBlock), 0), new R(new C(16, 16)), new MovingBlock(a, a - 48, a + 48)));
+  T.set(30, (a, b) => new x(new P(new C(a, b), 0, new C(O, O)), new D(new Na(drawMovingBlock), 0), new R(new C(32, 32)), new MovingBlock(a, a - 48, a + 48)));
   T.set(5, (a, b) =>{
     const c = G();
     return new x(new P(new C(a, b), 0, new C(O, O)), ...Cl(c.Na, 0), new R(new C(16, 16)))
@@ -18826,9 +18812,9 @@
     #play-button {
       display: block;
       position: absolute;
-      left: 60px;
-      width: 90px;
-      height: 21px;
+      left: 88px;
+      width: 150px;
+      height: 36px;
       z-index: 1000;
       pointer-events: auto;
       cursor: pointer;
@@ -18840,12 +18826,12 @@
       z-index: 1;
     }
 
-    #edit-button {
-      top: 458px;
+    #play-button {
+      top: 410px;
     }
 
-    #play-button {
-      top: 395px;
+    #edit-button {
+      top: 462px;
     }
 
     #edit-container,
