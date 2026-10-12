@@ -8558,6 +8558,20 @@
       this.j = new wl
     }
     H(a) {
+      // Advance moving blocks inside the existing collision step so their hitboxes and
+      // rendered positions stay synchronized. Bounds are world-space pixel coordinates.
+      for (const entity of this.O.find(MovingBlock, P)) {
+        const block = entity.get(MovingBlock);
+        const position = entity.get(P).position;
+        position.x += block.speed * block.direction * a;
+        if (position.x >= block.right) {
+          position.x = block.right;
+          block.direction = -1;
+        } else if (position.x <= block.left) {
+          position.x = block.left;
+          block.direction = 1;
+        }
+      }
       const b = this.O.find(R);
       for (var c of b) c.oe = c.get(P).position,
       c.le = c.get(R);
@@ -8721,7 +8735,7 @@
     ctx.restore();
   }
   var T = new Map;
-  T.set(30, (a, b) => new x(new P(new C(a, b), 0, new C(O, O)), new D(new Na(drawMovingBlock), 0), new R(new C(16, 16))));
+  T.set(30, (a, b) => new x(new P(new C(a, b), 0, new C(O, O)), new D(new Na(drawMovingBlock), 0), new R(new C(16, 16)), new MovingBlock(a, a - 48, a + 48)));
   T.set(5, (a, b) =>{
     const c = G();
     return new x(new P(new C(a, b), 0, new C(O, O)), ...Cl(c.Na, 0), new R(new C(16, 16)))
@@ -18576,7 +18590,7 @@
           <ddl-sprite-button type='edit'
             id='edit-button'
             @click=
-      ${ this.Wa }
+      ${ () => this.Ma() }
             title=
       ${ W('button_edit_game') }>
           <div id='edit-container'>
@@ -18589,7 +18603,7 @@
           <ddl-sprite-button type='play'
             id='play-button'
             @click=
-      ${ this.Fg }
+      ${ () => this.Wa() }
             title=
       ${ W('button_play_game') }>
             <div id='play-container'>
