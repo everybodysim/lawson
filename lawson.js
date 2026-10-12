@@ -17914,7 +17914,7 @@
                     @mouseout=
       ${ this.H }
                     title=
-      ${ W(Pr[c]) }
+      ${ 'movingBlock' === c ? 'Moving Block' : W(Pr[c]) }
                     ?pressed=
       ${ c === a.selected }
                     .value=
