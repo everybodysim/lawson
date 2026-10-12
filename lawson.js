@@ -8678,7 +8678,12 @@
   // Mod tile: solid pixel-art platform that patrols horizontally and reverses at its limits.
   var MovingBlock = class extends u {
     constructor(x, left, right, speed = 0.075) {
-      super(); this.left = left; this.right = right; this.speed = speed; this.direction = 1;
+      super();
+      this.origin = x;
+      this.left = left;
+      this.right = right;
+      this.speed = speed;
+      this.direction = 1;
     }
   };
   // One sprite per original Doodle art style. Missing files fall back to a crisp pixel-art tile.
@@ -20686,12 +20691,32 @@
   }
   var MovingBlockSystem = class extends Da {
     H() {
+      const colliders = this.O.find(R);
       for (const entity of this.O.find(MovingBlock)) {
         const block = entity.get(MovingBlock);
         const pos = entity.get(P).position;
+        const hitbox = entity.get(R);
         const velocity = entity.get(S).wa;
-        if (pos.x >= block.right) block.direction = -1;
-        else if (pos.x <= block.left) block.direction = 1;
+        let left = block.left;
+        let right = block.right;
+        const top = pos.y + hitbox.offset.y;
+        const bottom = top + hitbox.size.y;
+        // If ordinary solid tiles flank this platform, patrol between their inner edges.
+        for (const other of colliders) {
+          if (other === entity || other.get(S)) continue;
+          const otherPos = other.get(P).position;
+          const otherBox = other.get(R);
+          const otherLeft = otherPos.x + otherBox.offset.x;
+          const otherRight = otherLeft + otherBox.size.x;
+          const otherTop = otherPos.y + otherBox.offset.y;
+          const otherBottom = otherTop + otherBox.size.y;
+          if (otherBottom <= top || otherTop >= bottom) continue;
+          if (otherRight <= block.origin && otherRight >= block.left) left = Math.max(left, otherRight);
+          if (otherLeft >= block.origin + hitbox.size.x && otherLeft <= block.right + hitbox.size.x) right = Math.min(right, otherLeft - hitbox.size.x);
+        }
+        if (right < left) left = right = block.origin;
+        if (pos.x >= right) block.direction = -1;
+        else if (pos.x <= left) block.direction = 1;
         velocity.x = block.speed * block.direction;
         velocity.y = 0;
       }
