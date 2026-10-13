@@ -12241,24 +12241,26 @@
       const pb = box(entity);
       // The game world uses positive Y downward, so pushing UP means decreasing Y.
       // Detect blocks that touch the piston top, with a small tolerance for offsets.
-      const candidates = all.filter(other => {
-        if (other === entity || !movable(other) || !other.get(P) || !other.get(R)) return false;
-        const ob = box(other);
-        return Math.abs(ob.bottom - pb.top) <= 1.25 &&
-          ob.right > pb.left + 1 && ob.left < pb.right - 1;
-      }).sort((x, y) => box(y).top - box(x).top);
-      if (!candidates.length) continue;
-
-      // Push a vertical stack as one unit. First validate EVERY destination before
-      // moving anything, so a wall/ceiling can never cause clipping or partial pushes.
+      // Find the block touching the piston, then follow a contiguous stack upward.
+      // This avoids depending on exact tile-center alignment or sprite dimensions.
       const moving = [];
-      let nextTop = pb.top;
-      for (const block of candidates) {
-        const bb = box(block);
-        if (Math.abs(bb.bottom - nextTop) > 1.25) break;
-        moving.push(block);
-        nextTop = bb.top;
+      let supportTop = pb.top;
+      for (let depth = 0; depth < 32; depth++) {
+        const next = all.find(other => {
+          if (other === entity || moving.includes(other) || !movable(other) ||
+              !other.get(P) || !other.get(R)) return false;
+          const ob = box(other);
+          return Math.abs(ob.bottom - supportTop) <= 1.25 &&
+            ob.right > pb.left + 1 && ob.left < pb.right - 1;
+        });
+        if (!next) break;
+        moving.push(next);
+        supportTop = box(next).top;
       }
+      if (!moving.length) continue;
+
+      // Validate EVERY destination before moving anything, so a wall/ceiling can
+      // never cause clipping or a partial push.
       if (!moving.length) continue;
 
       let canMove = true;
