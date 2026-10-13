@@ -8516,7 +8516,7 @@
         a.translate(d.offset.x, d.offset.y);
         c = d;
         d = a;
-        c.Xa instanceof La ? (c = c.Xa, this.j.drawImage(c.v, c.o.x, c.o.y, c.j.x, c.j.y, 0, 0, c.j.x, c.j.y)) : c.Xa instanceof Na && c.Xa.j(d)
+        c.Xa instanceof La ? (c = c.Xa, this.j.drawImage(c.v, c.o.x, c.o.y, c.j.x, c.j.y, 0, 0, c.j.x, c.j.y)) : c.Xa instanceof Na && c.Xa.j(d, e)
       }
       a.restore()
     }
@@ -8821,18 +8821,60 @@
   }
   // Water is a seamless, animated volume: it has no solid collision surface.
   var WaterBlock = class extends u {};
-  function drawWaterBlock(ctx) {
+  function drawWaterBlock(ctx, entity) {
     ctx.save(); ctx.imageSmoothingEnabled = false;
+    // Clip all animation to this tile so no ripple or bubble can draw beyond its edges.
+    ctx.beginPath(); ctx.rect(0, 0, 48, 48); ctx.clip();
     const t = Date.now() * 0.001;
-    ctx.fillStyle = '#075a91'; ctx.fillRect(0, 0, 48, 48);
-    ctx.fillStyle = '#087eb2'; ctx.fillRect(0, 12, 48, 36);
+    let waterAbove = false;
+    if (entity && entity.O) {
+      const pos = entity.get(P).position, rect = entity.get(R);
+      const left = pos.x + rect.offset.x, top = pos.y + rect.offset.y;
+      waterAbove = entity.O.find(WaterBlock, P, R).some(other => {
+        if (other === entity) return false;
+        const op = other.get(P).position, or = other.get(R);
+        const ol = op.x + or.offset.x, ot = op.y + or.offset.y;
+        const ob = ot + or.size.y;
+        return Math.abs(ob - top) < 1.5 && ol < left + rect.size.x && ol + or.size.x > left;
+      });
+    }
+    ctx.fillStyle = '#087eb2'; ctx.fillRect(0, 0, 48, 48);
+    // Only exposed water surfaces get a darker top; stacked tiles stay visually continuous.
+    if (!waterAbove) {
+      ctx.fillStyle = '#075a91'; ctx.fillRect(0, 0, 48, 4);
+      ctx.fillStyle = '#0b6fa2'; ctx.fillRect(0, 4, 48, 2);
+    }
     ctx.fillStyle = '#129dca';
-    for (let y = 15; y < 48; y += 9) { const shift = Math.floor((t * 8 + y * 1.7) % 12); for (let x = -12 + shift; x < 48; x += 24) ctx.fillRect(x, y, 12, 3); }
-    // Moving internal ripples instead of a hard border make adjoining tiles blend together.
+    for (let y = 7; y < 48; y += 9) {
+      const shift = Math.floor((t * 8 + y * 1.7) % 12);
+      for (let x = 0; x < 48; x += 24) {
+        const px = Math.max(0, Math.min(36, x - 12 + shift));
+        ctx.fillRect(px, y, 12, 3);
+      }
+    }
     ctx.fillStyle = '#39d8e9';
-    for (let band = 0; band < 3; band++) for (let x = 0; x < 48; x += 3) { const wave = Math.sin((x / 48) * Math.PI * 4 + t * (2.1 + band * 0.2) + band * 1.9) * 1.5; if ((Math.floor(x / 3) + band) % 3 !== 0) ctx.fillRect(x, 7 + band * 16 + Math.round(wave), 3, 2); }
+    for (let band = 0; band < 3; band++) {
+      for (let x = 0; x < 48; x += 3) {
+        const wave = Math.sin((x / 48) * Math.PI * 4 + t * (2.1 + band * 0.2) + band * 1.9) * 1.5;
+        if ((Math.floor(x / 3) + band) % 3 !== 0) {
+          const y = Math.max(6, Math.min(46, 8 + band * 16 + Math.round(wave)));
+          ctx.fillRect(x, y, Math.min(3, 48 - x), 2);
+        }
+      }
+    }
     ctx.fillStyle = '#a5fbff';
-    for (let i = 0; i < 5; i++) { const phase = t * (0.55 + i * 0.07) + i * 2.399; const x = 5 + ((Math.sin(phase * 1.31 + i) + 1) * 0.5) * 38; const y = 14 + ((Math.sin(phase * 0.83 + i * 2) + 1) * 0.5) * 28; const size = i % 2 ? 2 : 3; ctx.fillRect(Math.round(x), Math.round(y), size, size); if (i % 2 === 0) { ctx.fillStyle = '#37cce4'; ctx.fillRect(Math.round(x), Math.round(y) + size, size, 2); ctx.fillStyle = '#a5fbff'; } }
+    for (let i = 0; i < 5; i++) {
+      const phase = t * (0.55 + i * 0.07) + i * 2.399;
+      const size = i % 2 ? 2 : 3;
+      const x = Math.max(0, Math.min(48 - size, Math.round(5 + ((Math.sin(phase * 1.31 + i) + 1) * 0.5) * 38)));
+      const y = Math.max(6, Math.min(48 - size - (i % 2 === 0 ? 2 : 0), Math.round(14 + ((Math.sin(phase * 0.83 + i * 2) + 1) * 0.5) * 28));
+      ctx.fillRect(x, y, size, size);
+      if (i % 2 === 0) {
+        ctx.fillStyle = '#37cce4';
+        ctx.fillRect(x, Math.min(47, y + size), size, Math.min(2, 48 - y - size));
+        ctx.fillStyle = '#a5fbff';
+      }
+    }
     ctx.restore();
   }
   var T = new Map;
@@ -17208,8 +17250,8 @@
           // Water damps momentum, cancels most gravity, and lets up/down steer vertically.
           m.x = 0.075 * g;
           if (m.x < 0) p.j = !0; else if (m.x > 0) p.j = !1;
-          m.y = ql(-0.17, 0.17, m.y * 0.82 + 0.075 * h + 0.00012 * a);
-          if (f && p.o) m.y = -0.14;
+          const swimVertical = e ? 1 : f ? -1 : 0;
+          m.y = ql(-0.17, 0.17, m.y * 0.82 + 0.075 * swimVertical + 0.00004 * a);
           os(k, p, m); p.o = !1;
         } else {
           m.x = 0.1 * g; 0 > m.x && (p.j = !0); 0 < m.x && (p.j = !1);
@@ -18049,13 +18091,16 @@
         'ball'],
         [
           'solid',
+          'breakable',
+          'pushableSolid',
+          'fire'
+        ],
+        [
           'movingBlock',
           'oneWayBlock',
           'crumblingBlock',
           'waterBlock',
-          'breakable',
-          'pushableSolid',
-          'fire'
+          'fallingSolid'
         ],
         [
           'goal',
