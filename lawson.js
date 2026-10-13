@@ -15986,9 +15986,9 @@
     },
     // Reuse existing sprite-sheet icons until dedicated toolbox icons are added.
     oneWayBlock: {
-      N: [0, 1428, 1514, 20, 20],
-      Aa: [0, 1428, 1537, 20, 20],
-      active: [0, 1451, 1521, 20, 20]
+      N: [0, 23, 1593, 20, 20],
+      Aa: [0, 69, 1593, 20, 20],
+      active: [0, 46, 1593, 20, 20]
     },
     crumblingBlock: {
       N: [0, 518, 1609, 20, 20],
@@ -18057,7 +18057,7 @@
                     @mouseout=
       ${ this.H }
                     title=
-      ${ 'movingBlock' === c ? 'Moving Block' : W(Pr[c]) }
+      ${ 'movingBlock' === c ? 'Moving Block' : W(Pr[c]) || ('oneWayBlock' === c ? 'One-Way Platform' : 'crumblingBlock' === c ? 'Crumbling Block' : '') }
                     ?pressed=
       ${ c === a.selected }
                     .value=
@@ -18198,7 +18198,7 @@
       a.target instanceof mt && (this.tool = a.target.tool)
     }
     Ma(a) {
-      a.target instanceof mt && (this.hoveredToolText = (a = a.target.hoveredTool) && a in Pr ? W(Pr[a]) : '');
+      a.target instanceof mt && (this.hoveredToolText = (a = a.target.hoveredTool) && a in Pr ? (W(Pr[a]) || ('oneWayBlock' === a ? 'One-Way Platform' : 'crumblingBlock' === a ? 'Crumbling Block' : '')) : '');
       this.errorText = ''
     }
     Wa() {
