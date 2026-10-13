@@ -8867,7 +8867,7 @@
       const phase = t * (0.55 + i * 0.07) + i * 2.399;
       const size = i % 2 ? 2 : 3;
       const x = Math.max(0, Math.min(48 - size, Math.round(5 + ((Math.sin(phase * 1.31 + i) + 1) * 0.5) * 38)));
-      const y = Math.max(6, Math.min(48 - size - (i % 2 === 0 ? 2 : 0), Math.round(14 + ((Math.sin(phase * 0.83 + i * 2) + 1) * 0.5) * 28));
+      const y = Math.max(6, Math.min(48 - size - (i % 2 === 0 ? 2 : 0), Math.round(14 + ((Math.sin(phase * 0.83 + i * 2) + 1) * 0.5) * 28)));
       ctx.fillRect(x, y, size, size);
       if (i % 2 === 0) {
         ctx.fillStyle = '#37cce4';
