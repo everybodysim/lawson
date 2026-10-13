@@ -15509,6 +15509,7 @@
         0,
         0
       ];
+      this.customIcon = '';
       this.rotationDegrees = 0
     }
     o() {
@@ -15520,10 +15521,10 @@
         ]: !0
       }),
       b = Gr({
-        '--ddl-sprite-button3-icon-idle': tr(this.iconIdle).cssText,
-        '--ddl-sprite-button3-icon-hover': tr(this.iconHover).cssText,
-        '--ddl-sprite-button3-icon-active': tr(this.iconActive).cssText,
-        '--ddl-sprite-button3-icon-disabled': tr(this.iconDisabled).cssText,
+        '--ddl-sprite-button3-icon-idle': this.customIcon || tr(this.iconIdle).cssText,
+        '--ddl-sprite-button3-icon-hover': this.customIcon || tr(this.iconHover).cssText,
+        '--ddl-sprite-button3-icon-active': this.customIcon || tr(this.iconActive).cssText,
+        '--ddl-sprite-button3-icon-disabled': this.customIcon || tr(this.iconDisabled).cssText,
         '--ddl-sprite-button3-icon-width': `${ ur(this.iconIdle) }px`,
         '--ddl-sprite-button3-icon-height': `${ X(this.iconIdle) }px`,
         transform: `rotate(${ this.rotationDegrees }deg)`
@@ -15666,6 +15667,10 @@
     type: Array
   }),
   n('design:type', Array)], Jr.prototype, 'iconDisabled', void 0);
+  l([Z({
+    type: String
+  }),
+  n('design:type', Object)], Jr.prototype, 'customIcon', void 0);
   l([Z({
     type: Number
   }),
@@ -16631,8 +16636,22 @@
       Aa: Mg,
       active: Kg
     }
-  },
-  Or = {
+  };
+  function customBlockToolIcon(tool) {
+    const palettes = {
+      movingBlock: {1:['#18233d','#4b6a9b','#82baff','#5275aa','#a9d9ff','#30466f'],2:['#202020','#555555','#dddddd','#888888','#ffffff','#333333'],3:['#39251d','#865333','#d5a15d','#a96c38','#ffe0a0','#5a3827'],4:['#182b20','#39744a','#73bf72','#4c985c','#c5ffc0','#244a31'],5:['#281b3e','#6947a1','#ba83ff','#8559ca','#f0d6ff','#402d64']},
+      oneWayBlock: {1:['#173b4a','#3ca5ba','#91f0ff','#287b91'],2:['#333333','#777777','#eeeeee','#555555'],3:['#5b3b20','#b27b3c','#f6d28b','#855326'],4:['#1c4930','#54a968','#b7ffb4','#347744'],5:['#39235e','#9868d8','#e0c8ff','#67429b']},
+      crumblingBlock: {1:['#633b28','#b7774a','#f5c58c','#3a2730'],2:['#454545','#999999','#eeeeee','#292929'],3:['#70401f','#c7833e','#ffe0a1','#422719'],4:['#34542b','#8da84d','#e0ee9b','#273d22'],5:['#4b2d66','#a779bf','#f0d1ff','#342040']}
+    };
+    if (!palettes[tool]) return '';
+    const p = palettes[tool][Qg] || palettes[tool][1];
+    let art = '';
+    if (tool === 'movingBlock') art = `<rect width="48" height="48" fill="${p[0]}"/><rect x="3" y="3" width="42" height="9" fill="${p[1]}"/><rect x="6" y="12" width="36" height="6" fill="${p[2]}"/><rect x="3" y="18" width="42" height="21" fill="${p[3]}"/><rect x="9" y="21" width="9" height="6" fill="${p[4]}"/><rect x="30" y="21" width="9" height="6" fill="${p[4]}"/><rect y="39" width="48" height="9" fill="${p[5]}"/><rect x="6" y="42" width="9" height="3" fill="${p[4]}"/><rect x="33" y="42" width="9" height="3" fill="${p[4]}"/>`;
+    else if (tool === 'oneWayBlock') art = `<rect width="48" height="24" fill="${p[0]}"/><rect x="3" y="3" width="42" height="6" fill="${p[1]}"/><rect x="6" y="9" width="36" height="3" fill="${p[2]}"/><rect y="18" width="48" height="6" fill="${p[3]}"/><rect x="6" y="21" width="9" height="3" fill="${p[2]}"/><rect x="33" y="21" width="9" height="3" fill="${p[2]}"/>`;
+    else art = `<rect width="48" height="48" fill="${p[0]}"/><path fill="${p[1]}" d="M3 3h42v9H3zM3 15h18v9H3zM27 15h18v9H27z"/><path fill="${p[2]}" d="M6 6h36v3H6zM6 18h12v3H6zM30 18h12v3H30zM9 39h9v3H9zM30 42h9v3h-9z"/><path fill="${p[3]}" d="M21 12h6v15h-6zM12 27h6v9h-6zM30 30h6v9h-6z"/>`;
+    return `url("data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" shape-rendering="crispEdges">${art}</svg>`)}") center / contain no-repeat`;
+  }
+  var Or = {
     playerPlatformer: 2,
     playerTopDown: 8,
     paddleHorizontal: 3,
@@ -16732,7 +16751,9 @@
     }
   };
   function Rr(a) {
-    a.v.get(D).Xa = Ta(Mr[a.j.oa.tool])
+    const tool = a.j.oa.tool;
+    const customDraw = { movingBlock: drawMovingBlock, oneWayBlock: drawOneWayBlock, crumblingBlock: drawCrumblingBlock }[tool];
+    a.v.get(D).Xa = customDraw ? new Na(customDraw) : Ta(Mr[tool])
   }
   function Sr(a, b) {
     a.j.oa.od && (a.j.oa.od.errorText = b)
@@ -18067,7 +18088,9 @@
                     .iconHover=
       ${ Nr[c].Aa }
                     .iconActive=
-      ${ Nr[c].active }>
+      ${ Nr[c].active }
+                    .customIcon=
+      ${ customBlockToolIcon(c) }>
                 </ddl-sprite-button>
       `) }
             </div>
@@ -18198,7 +18221,7 @@
       a.target instanceof mt && (this.tool = a.target.tool)
     }
     Ma(a) {
-      a.target instanceof mt && (this.hoveredToolText = (a = a.target.hoveredTool) && a in Pr ? (W(Pr[a]) || ('oneWayBlock' === a ? 'One-Way Platform' : 'crumblingBlock' === a ? 'Crumbling Block' : '')) : '');
+      a.target instanceof mt && (this.hoveredToolText = (a = a.target.hoveredTool) && a in Pr ? (W(Pr[a]) || ('movingBlock' === a ? 'Moving Block' : 'oneWayBlock' === a ? 'One-Way Platform' : 'crumblingBlock' === a ? 'Crumbling Block' : '')) : '');
       this.errorText = ''
     }
     Wa() {
