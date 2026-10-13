@@ -17251,7 +17251,7 @@
           m.x = 0.075 * g;
           if (m.x < 0) p.j = !0; else if (m.x > 0) p.j = !1;
           const swimVertical = e ? 1 : f ? -1 : 0;
-          m.y = ql(-0.17, 0.17, m.y * 0.82 + 0.075 * swimVertical + 0.00004 * a);
+          m.y = ql(-0.17, 0.17, m.y * 0.82 + 0.075 * swimVertical + 0.00012 * a);
           os(k, p, m); p.o = !1;
         } else {
           m.x = 0.1 * g; 0 > m.x && (p.j = !0); 0 < m.x && (p.j = !1);
