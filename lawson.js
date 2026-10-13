@@ -16115,6 +16115,10 @@
       ]
     },
     waterBlock: { N: [0, 1453, 1061, 20, 20], Aa: [0, 1453, 1084, 20, 20], active: [0, 945, 320, 20, 20] },
+    // Every toolbox item must have idle/hover/active sprite frames; missing entries
+    // throw during template rendering and prevent the entire toolbar from rendering.
+    piston: { N: [0, 1428, 1514, 20, 20], Aa: [0, 1428, 1537, 20, 20], active: [0, 1451, 1521, 20, 20] },
+    stickyPiston: { N: [0, 1428, 1514, 20, 20], Aa: [0, 1428, 1537, 20, 20], active: [0, 1451, 1521, 20, 20] },
     movingBlock: {
       N: [0, 1428, 1514, 20, 20],
       Aa: [0, 1428, 1537, 20, 20],
