@@ -8593,6 +8593,7 @@
           if (!oh) continue;
           const otherBottom = op.y + oh.offset.y + oh.size.y;
           const otherLeft = op.x + oh.offset.x, otherRight = otherLeft + oh.size.x;
+          if (other.Rc.has(mj)) continue; // falling blocks keep their grid slot, never ride
           if (Math.abs(otherBottom - top) <= 0.5 &&
               otherRight > platLeft + 3 && otherLeft < platRight - 3) riders.push(other);
         }
@@ -8612,53 +8613,86 @@
             allowedDelta = otherRight - oldLeft;
           }
         }
-        // A platform must never teleport its rider through a wall. Clamp to the
-        // nearest obstruction across the rider's full collision box as well.
-        for (const rider of riders) {
+        // Platforms move freely and only reverse on real solid geometry. A rider
+        // that a wall would block is simply left behind and falls off the side;
+        // the platform itself never stops or turns for a rider.
+        platformPos.x += allowedDelta;
+        if (Math.abs(allowedDelta - frameDelta) > 0.001) block.direction *= -1;
+        if (allowedDelta) for (const rider of riders) {
           const rp = rider.get(P).position, rh = rider.get(R);
-          const riderLeft = rp.x + rh.offset.x, riderRight = riderLeft + rh.size.x;
+          const nx = rp.x + allowedDelta;
+          const rTop = rp.y + rh.offset.y, rBot = rTop + rh.size.y;
+          const rLeft = nx + rh.offset.x, rRight = rLeft + rh.size.x;
+          let blocked = false;
           for (const other of walls) {
             if (other === entity || other === rider || riders.includes(other) || !other.get(P) || !other.get(R)) continue;
             const op = other.get(P).position, oh = other.get(R);
-            const otherTop = op.y + oh.offset.y, otherBottom = otherTop + oh.size.y;
-            const riderTop = rp.y + rh.offset.y, riderBottom = riderTop + rh.size.y;
-            if (riderBottom <= otherTop + 0.5 || riderTop >= otherBottom - 0.5) continue;
-            const otherLeft = op.x + oh.offset.x, otherRight = otherLeft + oh.size.x;
-            if (allowedDelta > 0 && riderRight <= otherLeft + 0.5 && riderRight + allowedDelta > otherLeft) {
-              allowedDelta = Math.min(allowedDelta, otherLeft - riderRight);
-            } else if (allowedDelta < 0 && riderLeft >= otherRight - 0.5 && riderLeft + allowedDelta < otherRight) {
-              allowedDelta = Math.max(allowedDelta, otherRight - riderLeft);
-            }
+            const oTop = op.y + oh.offset.y, oBot = oTop + oh.size.y;
+            if (rBot <= oTop + 0.5 || rTop >= oBot - 0.5) continue;
+            const oLeft = op.x + oh.offset.x, oRight = oLeft + oh.size.x;
+            if (rRight > oLeft + 0.5 && rLeft < oRight - 0.5) { blocked = true; break; }
           }
+          if (!blocked) rp.x = nx;
         }
-        // Respect the patrol bounds configured at spawn (origin +/- range).
-        if (allowedDelta > 0 && platLeft + allowedDelta > block.right) allowedDelta = Math.max(0, block.right - platLeft);
-        else if (allowedDelta < 0 && platLeft + allowedDelta < block.left) allowedDelta = Math.min(0, block.left - platLeft);
-        platformPos.x += allowedDelta;
-        if (Math.abs(allowedDelta - frameDelta) > 0.001) block.direction *= -1;
-        if (allowedDelta) for (const rider of riders) rider.get(P).position.x += allowedDelta;
       }
       const b = this.O.find(R);
       // Update crumbling blocks before normal character collision resolution.
+      const crumbleSolids = this.O.find(R, P);
       for (const entity of this.O.find(CrumblingBlock, P, R)) {
         const block = entity.get(CrumblingBlock), pos = entity.get(P).position, hit = entity.get(R);
+        const myTop = pos.y + hit.offset.y, myLeft = pos.x + hit.offset.x, myRight = myLeft + hit.size.x, myBot = myTop + hit.size.y;
         if (block.falling) {
           block.fallSpeed = Math.min(0.9, block.fallSpeed + 0.0012 * a);
-          pos.y += block.fallSpeed * a;
-          if (pos.y > 1200) { z(this.O, entity); continue; }
+          // Real falling collision: step down and stop on the first solid
+          // surface below (water and open blink gates are not surfaces).
+          let dy = block.fallSpeed * a, landed = false;
+          while (dy > 0 && !landed) {
+            const step = Math.min(1, dy); dy -= step;
+            // The box moves every step, so its top/bottom must be recomputed
+            // each step or the landing check compares against stale bounds.
+            const curTop = pos.y + hit.offset.y, curBot = curTop + hit.size.y;
+            for (const other of crumbleSolids) {
+              if (other === entity || other.Rc.has(WaterBlock)) continue;
+              if (other.Rc.has(oj) && true === other.get(oj).Yc) continue;
+              const op = other.get(P).position, oh = other.get(R);
+              const oTop = op.y + oh.offset.y, oBot = oTop + oh.size.y;
+              const oL = op.x + oh.offset.x, oR = oL + oh.size.x;
+              if (curBot + step > oTop + 0.001 && curTop < oBot - 0.001 && oR > myLeft + 0.001 && oL < myRight - 0.001 && curBot <= oTop + 1.01) {
+                pos.y = oTop - hit.size.y - hit.offset.y;
+                landed = true; break;
+              }
+            }
+            if (!landed) pos.y += step;
+          }
+          if (landed) { block.falling = false; block.resting = true; block.fallSpeed = 0; }
+          else if (pos.y > 1200) { z(this.O, entity); }
+          continue;
+        }
+        if (block.resting) {
+          // The block stays where it landed. If its support moved away
+          // (e.g. a moving platform sliding out), it resumes falling.
+          let supported = false;
+          for (const other of crumbleSolids) {
+            if (other === entity || other.Rc.has(WaterBlock)) continue;
+            if (other.Rc.has(oj) && true === other.get(oj).Yc) continue;
+            const op = other.get(P).position, oh = other.get(R);
+            const oTop = op.y + oh.offset.y, oBot = oTop + oh.size.y;
+            const oL = op.x + oh.offset.x, oR = oL + oh.size.x;
+            if (Math.abs(oTop - myBot) <= 0.6 && oBot > myTop && oR > myLeft + 0.001 && oL < myRight - 0.001) { supported = true; break; }
+          }
+          if (!supported) { block.resting = false; block.falling = true; block.fallSpeed = 0; }
           continue;
         }
         let stoodOn = false;
-        const top = pos.y + hit.offset.y, left = pos.x + hit.offset.x, right = left + hit.size.x;
         for (const other of this.O.find(S, P, R)) {
           if (other === entity) continue;
           const op = other.get(P).position, oh = other.get(R);
           const bottom = op.y + oh.offset.y + oh.size.y;
           const ol = op.x + oh.offset.x, or = ol + oh.size.x;
-          if (Math.abs(bottom - top) <= 0.6 && or > left + 1 && ol < right - 1) { stoodOn = true; break; }
+          if (Math.abs(bottom - myTop) <= 0.6 && or > myLeft + 1 && ol < myRight - 1) { stoodOn = true; break; }
         }
         if (stoodOn) block.stoodFor += a; else block.stoodFor = 0;
-        if (block.stoodFor >= 1500) { block.falling = true; block.fallSpeed = 0.04; }
+        if (block.stoodFor >= 1000) { block.falling = true; block.fallSpeed = 0.04; }
       }
       for (var c of b) c.oe = c.get(P).position,
       c.le = c.get(R);
@@ -8785,18 +8819,28 @@
       this.direction = 1;
     }
   };
+  // Authentic per-theme palettes sampled from the engine's own style tiles
+  // (style 1 Fairchannel B&W+cyan, 2 green, 3 peach, 4 orange, 5 neon on black).
+  var THEME_COLORS = {
+    1: ['#2b2b2b', '#4c4c4c', '#e6e6e6', '#3d3d3d', '#4cfeff', '#161616'],
+    2: ['#418f78', '#5eb989', '#c6f094', '#7bdb79', '#f88967', '#2f6a58'],
+    3: ['#e0a678', '#fcc099', '#fffdf0', '#fdcfa7', '#fcd2f9', '#c98d60'],
+    4: ['#a56727', '#eeb683', '#fffdf0', '#d19655', '#eeb683', '#8a5522'],
+    5: ['#00913d', '#00d257', '#d8ffd0', '#00b84c', '#74ea6a', '#00702f']
+  };
+  var THEME_WATER = {
+    1: ['#0e5f6b', '#128c99', '#1aa3b2', '#4cfeff', '#e0ffff'],
+    2: ['#2f7d76', '#4fb3a3', '#66ccbb', '#a5f0e0', '#e8fffa'],
+    3: ['#5a9fc4', '#7fc0dd', '#9ed0ea', '#c1e7ff', '#eefaff'],
+    4: ['#4a6fa5', '#6b93c4', '#8aabd8', '#aacdf0', '#e8f2ff'],
+    5: ['#00913d', '#00d257', '#00e060', '#74ea6a', '#d8ffd0']
+  };
   // Draw at the same 48x48 source-pixel scale as the original Doodle tiles.
   // The game's world transform scales these 48 source pixels to one 16-unit tile.
   function drawMovingBlock(ctx) {
     ctx.save();
     ctx.imageSmoothingEnabled = false;
-    const palettes = {
-      1: ['#18233d', '#4b6a9b', '#82baff', '#5275aa', '#a9d9ff', '#30466f'],
-      2: ['#202020', '#555555', '#dddddd', '#888888', '#ffffff', '#333333'],
-      3: ['#39251d', '#865333', '#d5a15d', '#a96c38', '#ffe0a0', '#5a3827'],
-      4: ['#182b20', '#39744a', '#73bf72', '#4c985c', '#c5ffc0', '#244a31'],
-      5: ['#281b3e', '#6947a1', '#ba83ff', '#8559ca', '#f0d6ff', '#402d64']
-    };
+    const palettes = THEME_COLORS;
     const palette = palettes[Qg] || palettes[1];
     ctx.fillStyle = palette[0]; ctx.fillRect(0, 0, 48, 48);
     ctx.fillStyle = palette[1]; ctx.fillRect(3, 3, 42, 9);
@@ -8810,29 +8854,29 @@
   }
   // One-way platforms collide only when approached from above.
   var OneWayBlock = class extends u {};
-  // Crumbling platforms begin falling 1.5 seconds after a character stands on them.
+  // Crumbling platforms begin falling 1 second after a character stands on them.
   var CrumblingBlock = class extends u {
-    constructor() { super(); this.stoodFor = 0; this.falling = false; this.fallSpeed = 0; }
+    constructor() { super(); this.stoodFor = 0; this.falling = false; this.resting = false; this.fallSpeed = 0; }
   };
   function drawOneWayBlock(ctx) {
     ctx.save(); ctx.imageSmoothingEnabled = false;
-    const palettes = {1:['#173b4a','#3ca5ba','#91f0ff','#287b91'],2:['#333333','#777777','#eeeeee','#555555'],3:['#5b3b20','#b27b3c','#f6d28b','#855326'],4:['#1c4930','#54a968','#b7ffb4','#347744'],5:['#39235e','#9868d8','#e0c8ff','#67429b']};
+    const palettes = THEME_COLORS;
     const p=palettes[Qg]||palettes[1];
     ctx.fillStyle=p[0];ctx.fillRect(0,0,48,24);
     ctx.fillStyle=p[1];ctx.fillRect(3,3,42,6);
     ctx.fillStyle=p[2];ctx.fillRect(6,9,36,3);
-    ctx.fillStyle=p[3];ctx.fillRect(0,18,48,6);
+    ctx.fillStyle=p[5];ctx.fillRect(0,18,48,6);
     ctx.fillStyle=p[2];ctx.fillRect(6,21,9,3);ctx.fillRect(33,21,9,3);
     ctx.restore();
   }
   function drawCrumblingBlock(ctx) {
     ctx.save(); ctx.imageSmoothingEnabled = false;
-    const palettes = {1:['#633b28','#b7774a','#f5c58c','#3a2730'],2:['#454545','#999999','#eeeeee','#292929'],3:['#70401f','#c7833e','#ffe0a1','#422719'],4:['#34542b','#8da84d','#e0ee9b','#273d22'],5:['#4b2d66','#a779bf','#f0d1ff','#342040']};
+    const palettes = THEME_COLORS;
     const p=palettes[Qg]||palettes[1];
     ctx.fillStyle=p[0];ctx.fillRect(0,0,48,48);
     ctx.fillStyle=p[1];ctx.fillRect(3,3,42,9);ctx.fillRect(3,15,18,9);ctx.fillRect(27,15,18,9);
     ctx.fillStyle=p[2];ctx.fillRect(6,6,36,3);ctx.fillRect(6,18,12,3);ctx.fillRect(30,18,12,3);
-    ctx.fillStyle=p[3];ctx.fillRect(21,12,6,15);ctx.fillRect(12,27,6,9);ctx.fillRect(30,30,6,9);
+    ctx.fillStyle=p[5];ctx.fillRect(21,12,6,15);ctx.fillRect(12,27,6,9);ctx.fillRect(30,30,6,9);
     ctx.fillStyle=p[2];ctx.fillRect(9,39,9,3);ctx.fillRect(30,42,9,3);
     ctx.restore();
   }
@@ -8862,41 +8906,48 @@
       }
       waterAbove = _waterCacheList.some(w => Math.abs(w[2] - top) < 1.5 && w[0] < left + rect.size.x && w[1] > left);
     }
-    ctx.fillStyle = '#087eb2'; ctx.fillRect(0, 0, 48, 48);
+    const wp = (THEME_WATER[Qg] || THEME_WATER[1]);
+    ctx.fillStyle = wp[1]; ctx.fillRect(0, 0, 48, 48);
     // Only exposed water surfaces get a darker top; stacked tiles stay visually continuous.
     if (!waterAbove) {
-      ctx.fillStyle = '#075a91'; ctx.fillRect(0, 0, 48, 4);
-      ctx.fillStyle = '#0b6fa2'; ctx.fillRect(0, 4, 48, 2);
+      ctx.fillStyle = wp[0]; ctx.fillRect(0, 0, 48, 4);
+      ctx.fillStyle = wp[2]; ctx.fillRect(0, 4, 48, 2);
     }
-    ctx.fillStyle = '#129dca';
-    for (let y = 7; y < 48; y += 9) {
-      const shift = Math.floor((t * 8 + y * 1.7) % 12);
-      for (let x = 0; x < 48; x += 24) {
-        const px = Math.max(0, Math.min(36, x - 12 + shift));
-        ctx.fillRect(px, y, 12, 3);
-      }
-    }
-    ctx.fillStyle = '#39d8e9';
+    // Per-tile seeded randomness: every water tile gets its own ripples and
+    // its own bubble field instead of all tiles sharing one repeating pattern.
+    let seed = (Math.round((entity && entity.Rc && entity.Rc.has(P)) ? entity.get(P).position.x : 0) * 73856093
+      ^ Math.round((entity && entity.Rc && entity.Rc.has(P)) ? entity.get(P).position.y : 0) * 19349663) >>> 0;
+    if (!seed) seed = 424242;
+    let sstate = seed;
+    const rnd = () => { sstate ^= sstate << 13; sstate >>>= 0; sstate ^= sstate >>> 17; sstate ^= sstate << 5; sstate >>>= 0; return sstate / 4294967296; };
+    const bandPhase = rnd() * 6.283;
+    ctx.fillStyle = wp[3];
     for (let band = 0; band < 3; band++) {
+      const bandOff = rnd() * 6.283;
       for (let x = 0; x < 48; x += 3) {
-        const wave = Math.sin((x / 48) * Math.PI * 4 + t * (2.1 + band * 0.2) + band * 1.9) * 1.5;
+        const wave = Math.sin((x / 48) * Math.PI * 4 + t * (1.7 + band * 0.31 + rnd() * 0.2) + band * 1.9 + bandPhase + bandOff) * 1.5;
         if ((Math.floor(x / 3) + band) % 3 !== 0) {
           const y = Math.max(6, Math.min(46, 8 + band * 16 + Math.round(wave)));
           ctx.fillRect(x, y, Math.min(3, 48 - x), 2);
         }
       }
     }
-    ctx.fillStyle = '#a5fbff';
+    ctx.fillStyle = wp[4];
     for (let i = 0; i < 5; i++) {
-      const phase = t * (0.55 + i * 0.07) + i * 2.399;
-      const size = i % 2 ? 2 : 3;
-      const x = Math.max(0, Math.min(48 - size, Math.round(5 + ((Math.sin(phase * 1.31 + i) + 1) * 0.5) * 38)));
-      const y = Math.max(6, Math.min(48 - size - (i % 2 === 0 ? 2 : 0), Math.round(14 + ((Math.sin(phase * 0.83 + i * 2) + 1) * 0.5) * 28)));
-      ctx.fillRect(x, y, size, size);
-      if (i % 2 === 0) {
-        ctx.fillStyle = '#37cce4';
-        ctx.fillRect(x, Math.min(47, y + size), size, Math.min(2, 48 - y - size));
-        ctx.fillStyle = '#a5fbff';
+      const bx = 2 + rnd() * 42;
+      const rise = 3.5 + rnd() * 3.5;
+      const phase = rnd() * 46;
+      const wobble = 1 + rnd() * 2.5;
+      const wfreq = 0.8 + rnd() * 1.6;
+      const size = 2 + (rnd() > 0.5 ? 1 : 0);
+      const cyc = (t * rise + phase) % 46;
+      const y = 48 - size - cyc;
+      const x = Math.max(0, Math.min(48 - size, bx + Math.sin(t * wfreq + phase) * wobble));
+      ctx.fillRect(Math.round(x), Math.round(y), size, size);
+      if (size === 2) {
+        ctx.fillStyle = wp[2];
+        ctx.fillRect(Math.round(x), Math.min(47, Math.round(y) + size), size, Math.min(2, 48 - Math.round(y) - size));
+        ctx.fillStyle = wp[4];
       }
     }
     ctx.restore();
@@ -15598,6 +15649,9 @@
         0
       ];
       this.customIcon = '';
+      this.customIconIdle = '';
+      this.customIconHover = '';
+      this.customIconActive = '';
       this.rotationDegrees = 0
     }
     o() {
@@ -15609,9 +15663,9 @@
         ]: !0
       }),
       b = Gr({
-        '--ddl-sprite-button3-icon-idle': this.customIcon || tr(this.iconIdle).cssText,
-        '--ddl-sprite-button3-icon-hover': this.customIcon || tr(this.iconHover).cssText,
-        '--ddl-sprite-button3-icon-active': this.customIcon || tr(this.iconActive).cssText,
+        '--ddl-sprite-button3-icon-idle': this.customIconIdle || this.customIcon || tr(this.iconIdle).cssText,
+        '--ddl-sprite-button3-icon-hover': this.customIconHover || this.customIcon || tr(this.iconHover).cssText,
+        '--ddl-sprite-button3-icon-active': this.customIconActive || this.customIcon || tr(this.iconActive).cssText,
         '--ddl-sprite-button3-icon-disabled': this.customIcon || tr(this.iconDisabled).cssText,
         '--ddl-sprite-button3-icon-width': `${ ur(this.iconIdle) }px`,
         '--ddl-sprite-button3-icon-height': `${ X(this.iconIdle) }px`,
@@ -16729,21 +16783,25 @@
       active: Kg
     }
   };
-  function customBlockToolIcon(tool) {
-    const palettes = {
-      movingBlock: {1:['#18233d','#4b6a9b','#82baff','#5275aa','#a9d9ff','#30466f'],2:['#202020','#555555','#dddddd','#888888','#ffffff','#333333'],3:['#39251d','#865333','#d5a15d','#a96c38','#ffe0a0','#5a3827'],4:['#182b20','#39744a','#73bf72','#4c985c','#c5ffc0','#244a31'],5:['#281b3e','#6947a1','#ba83ff','#8559ca','#f0d6ff','#402d64']},
-      oneWayBlock: {1:['#173b4a','#3ca5ba','#91f0ff','#287b91'],2:['#333333','#777777','#eeeeee','#555555'],3:['#5b3b20','#b27b3c','#f6d28b','#855326'],4:['#1c4930','#54a968','#b7ffb4','#347744'],5:['#39235e','#9868d8','#e0c8ff','#67429b']},
-      crumblingBlock: {1:['#633b28','#b7774a','#f5c58c','#3a2730'],2:['#454545','#999999','#eeeeee','#292929'],3:['#70401f','#c7833e','#ffe0a1','#422719'],4:['#34542b','#8da84d','#e0ee9b','#273d22'],5:['#4b2d66','#a779bf','#f0d1ff','#342040']},
-      waterBlock: {1:['#075a91','#087eb2','#39d8e9','#a5fbff'],2:['#263b4d','#526f89','#b6d9f4','#eafaff'],3:['#075a91','#087eb2','#39d8e9','#a5fbff'],4:['#075a91','#087eb2','#39d8e9','#a5fbff'],5:['#173c86','#2875c9','#72c9ff','#d7f6ff']},
-    };
-    if (!palettes[tool]) return '';
-    const p = palettes[tool][Qg] || palettes[tool][1];
-    let art = '';
-    if (tool === 'movingBlock') art = `<rect width="48" height="48" fill="${p[0]}"/><rect x="3" y="3" width="42" height="9" fill="${p[1]}"/><rect x="6" y="12" width="36" height="6" fill="${p[2]}"/><rect x="3" y="18" width="42" height="21" fill="${p[3]}"/><rect x="9" y="21" width="9" height="6" fill="${p[4]}"/><rect x="30" y="21" width="9" height="6" fill="${p[4]}"/><rect y="39" width="48" height="9" fill="${p[5]}"/><rect x="6" y="42" width="9" height="3" fill="${p[4]}"/><rect x="33" y="42" width="9" height="3" fill="${p[4]}"/>`;
-    else if (tool === 'oneWayBlock') art = `<rect width="48" height="24" fill="${p[0]}"/><rect x="3" y="3" width="42" height="6" fill="${p[1]}"/><rect x="6" y="9" width="36" height="3" fill="${p[2]}"/><rect y="18" width="48" height="6" fill="${p[3]}"/><rect x="6" y="21" width="9" height="3" fill="${p[2]}"/><rect x="33" y="21" width="9" height="3" fill="${p[2]}"/>`;
-    else if (tool === 'waterBlock') art = `<rect width="48" height="48" fill="${p[0]}"/><rect y="12" width="48" height="36" fill="${p[1]}"/><path fill="${p[2]}" d="M0 7h12v3H0zM18 5h12v3H18zM36 7h12v3H36zM3 22h12v3H3zM27 31h12v3H27z"/><g fill="${p[3]}"><rect x="9" y="16" width="3" height="3"/><rect x="34" y="26" width="3" height="3"/><rect x="20" y="39" width="2" height="2"/></g>`;
-    else art = `<rect width="48" height="48" fill="${p[0]}"/><path fill="${p[1]}" d="M3 3h42v9H3zM3 15h18v9H3zM27 15h18v9H27z"/><path fill="${p[2]}" d="M6 6h36v3H6zM6 18h12v3H6zM30 18h12v3H30zM9 39h9v3H9zM30 42h9v3h-9z"/><path fill="${p[3]}" d="M21 12h6v15h-6zM12 27h6v9h-6zM30 30h6v9h-6z"/>`;
-    return `url("data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" shape-rendering="crispEdges">${art}</svg>`)}") center / contain no-repeat`;
+  // Toolbox icons for the new blocks. The original toolbar uses dark-grayscale
+  // idle icons, magenta/purple/gold hover icons and light-grayscale pressed
+  // icons; these match that pattern so the new tools read like native ones.
+  // In-game the blocks themselves are drawn by the theme-aware draw functions.
+  function blockToolIcon(tool, mode) {
+    const art = {
+      movingBlock: p => `<rect x="3" y="6" width="14" height="9" fill="${p.o}"/><rect x="4" y="7" width="12" height="7" fill="${p.m}"/><rect x="4" y="7" width="12" height="2" fill="${p.l}"/><rect x="6" y="10" width="2" height="2" fill="${p.o}"/><rect x="12" y="10" width="2" height="2" fill="${p.o}"/><rect x="2" y="9" width="1" height="1" fill="${p.m}"/><rect x="1" y="10" width="1" height="1" fill="${p.m}"/><rect x="0" y="11" width="1" height="1" fill="${p.m}"/><rect x="17" y="9" width="1" height="1" fill="${p.m}"/><rect x="18" y="10" width="1" height="1" fill="${p.m}"/><rect x="19" y="11" width="1" height="1" fill="${p.m}"/>`,
+      oneWayBlock: p => `<rect x="2" y="10" width="16" height="6" fill="${p.o}"/><rect x="3" y="11" width="14" height="4" fill="${p.m}"/><rect x="3" y="11" width="14" height="1" fill="${p.l}"/><rect x="9" y="2" width="2" height="1" fill="${p.m}"/><rect x="8" y="3" width="4" height="1" fill="${p.m}"/><rect x="7" y="4" width="6" height="1" fill="${p.m}"/><rect x="9" y="5" width="2" height="4" fill="${p.m}"/>`,
+      crumblingBlock: p => `<rect x="2" y="2" width="16" height="13" fill="${p.o}"/><rect x="3" y="3" width="14" height="11" fill="${p.m}"/><rect x="3" y="3" width="14" height="2" fill="${p.l}"/><rect x="10" y="3" width="1" height="2" fill="${p.o}"/><rect x="9" y="5" width="1" height="2" fill="${p.o}"/><rect x="10" y="7" width="1" height="2" fill="${p.o}"/><rect x="9" y="9" width="1" height="2" fill="${p.o}"/><rect x="10" y="11" width="1" height="3" fill="${p.o}"/><rect x="5" y="16" width="2" height="1" fill="${p.m}"/><rect x="12" y="17" width="2" height="1" fill="${p.m}"/><rect x="8" y="18" width="1" height="1" fill="${p.m}"/>`,
+      waterBlock: p => `<rect x="1" y="3" width="18" height="14" fill="${p.o}"/><rect x="2" y="4" width="16" height="12" fill="${p.m}"/><rect x="2" y="4" width="16" height="1" fill="${p.l}"/><rect x="3" y="8" width="3" height="1" fill="${p.l}"/><rect x="8" y="7" width="3" height="1" fill="${p.l}"/><rect x="13" y="8" width="3" height="1" fill="${p.l}"/><rect x="4" y="11" width="3" height="1" fill="${p.l}"/><rect x="10" y="10" width="3" height="1" fill="${p.l}"/><rect x="6" y="13" width="2" height="2" fill="${p.l}"/><rect x="12" y="12" width="1" height="1" fill="${p.l}"/><rect x="14" y="14" width="2" height="1" fill="${p.l}"/>`
+    }[tool];
+    if (!art) return '';
+    const palettes = [
+      { o: '#000000', m: '#9c8fae', l: '#e1d6e4' },
+      { o: '#3c19aa', m: '#be008c', l: '#ffda7c' },
+      { o: '#9c8fae', m: '#e1d6e4', l: '#ffffff' }
+    ];
+    const p = palettes[mode] || palettes[0];
+    return `url("data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" shape-rendering="crispEdges">${art(p)}</svg>`)}") center / contain no-repeat`;
   }
   var Or = {
     playerPlatformer: 2,
@@ -18205,8 +18263,12 @@
       ${ Nr[c].Aa }
                     .iconActive=
       ${ Nr[c].active }
-                    .customIcon=
-      ${ customBlockToolIcon(c) }>
+                    .customIconIdle=
+      ${ blockToolIcon(c, 0) }
+                    .customIconHover=
+      ${ blockToolIcon(c, 1) }
+                    .customIconActive=
+      ${ blockToolIcon(c, 2) }>
                 </ddl-sprite-button>
       `) }
             </div>
@@ -18232,7 +18294,13 @@
                 .iconHover=
       ${ Nr[a.selected].Aa }
                 .iconActive=
-      ${ Nr[a.selected].active }>
+      ${ Nr[a.selected].active }
+                    .customIconIdle=
+      ${ blockToolIcon(a.selected, 0) }
+                    .customIconHover=
+      ${ blockToolIcon(a.selected, 1) }
+                    .customIconActive=
+      ${ blockToolIcon(a.selected, 2) }>
             </ddl-sprite-button>
           </div>
         
