@@ -8503,6 +8503,9 @@
     H() {
       const a = this.j;
       a.save();
+      // Clear in device/canvas coordinates, not with a transform left by a prior frame.
+      // Otherwise the clear rectangle can move/scale with the camera and leave trails.
+      a.setTransform(1, 0, 0, 1, 0, 0);
       a.clearRect(0, 0, a.canvas.width, a.canvas.height);
       const b = tl(this);
       var c = this.O.find(D);
@@ -12221,20 +12224,39 @@
     for (const entity of a.find(PistonBlock, P, R)) {
       const piston = entity.get(PistonBlock), pos = entity.get(P).position;
       if (!piston.extended) {
-        const tx = pos.x + 16, ty = pos.y;
+        // Pistons push UP by one tile. Test the cell above the piston and move
+        // supported movable blocks vertically, keeping their original X position.
+        const tx = pos.x, ty = pos.y - 16;
         const occupants = all.filter(other => {
           if (other === entity || !other.get(P) || !other.get(R)) return false;
           const p = other.get(P).position, h = other.get(R);
           return overlaps(tx, ty, p.x + h.offset.x, p.y + h.offset.y);
         });
+        // Only extend when every block in the push path can move; do not leave
+        // half a stack moved if another block makes the push impossible.
+        const snapshots = new Map();
+        for (const e of all) {
+          const p = e.get(P);
+          if (p) snapshots.set(e, { x: p.position.x, y: p.position.y });
+        }
         let success = true;
-        for (const occupant of occupants) if (!movable(occupant) || !tryPush(occupant, 16, 0)) { success = false; break; }
-        if (success) { piston.extended = true; piston.pulled = piston.sticky && occupants.length === 1 ? occupants[0] : null; }
+        for (const occupant of occupants) {
+          if (!movable(occupant) || !tryPush(occupant, 0, -16, new Set())) { success = false; break; }
+        }
+        if (!success) {
+          for (const [e, p] of snapshots) {
+            const transform = e.get(P);
+            if (transform) { transform.position.x = p.x; transform.position.y = p.y; }
+          }
+        } else {
+          piston.extended = true;
+          piston.pulled = piston.sticky && occupants.length === 1 ? occupants[0] : null;
+        }
       } else {
         piston.extended = false;
         if (piston.sticky && piston.pulled && piston.pulled.O) {
           const pulled = piston.pulled, pp = pulled.get(P).position, hit = pulled.get(R);
-          const tx = pos.x + 16 - hit.offset.x, ty = pos.y - hit.offset.y;
+          const tx = pos.x - hit.offset.x, ty = pos.y - 16 - hit.offset.y;
           if (canOccupy(tx, ty, pulled)) { pp.x = tx; pp.y = ty; }
         }
         piston.pulled = null;
