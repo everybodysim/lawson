@@ -8558,8 +8558,6 @@
       this.j = new wl
     }
     H(a) {
-      // Move the platform in small, collision-aware steps. This keeps the original
-      // collision engine in charge of the player while the platform carries riders.
       const movingEntities = this.O.find(MovingBlock, P, R);
       const allSolid = this.O.find(R, P);
       for (const entity of movingEntities) {
@@ -8567,45 +8565,61 @@
         const platformPos = entity.get(P).position;
         const platformHit = entity.get(R);
         const startX = platformPos.x;
-        const frameDelta = Math.max(-4, Math.min(4, block.speed * block.direction * a));
+        const frameDelta = Math.max(-2, Math.min(2, block.speed * block.direction * a));
         if (!frameDelta) continue;
         const top = platformPos.y + platformHit.offset.y;
         const bottom = top + platformHit.size.y;
+        const platLeft = platformPos.x + platformHit.offset.x;
+        const platRight = platLeft + platformHit.size.x;
         const riders = [];
+        // Require near-exact vertical contact and meaningful horizontal overlap.
         for (const other of allSolid) {
           if (other === entity || !other.Rc.has(S)) continue;
           const op = other.get(P).position, oh = other.get(R);
           if (!oh) continue;
           const otherBottom = op.y + oh.offset.y + oh.size.y;
           const otherLeft = op.x + oh.offset.x, otherRight = otherLeft + oh.size.x;
-          const platLeft = platformPos.x + platformHit.offset.x, platRight = platLeft + platformHit.size.x;
-          if (Math.abs(otherBottom - top) <= 2 && otherRight > platLeft + 1 && otherLeft < platRight - 1) riders.push(other);
+          if (Math.abs(otherBottom - top) <= 0.5 &&
+              otherRight > platLeft + 3 && otherLeft < platRight - 3) riders.push(other);
         }
-        let nextX = platformPos.x + frameDelta;
-        let hitWall = false;
+        let allowedDelta = frameDelta;
+        // Clamp the platform itself against solid geometry.
         for (const other of allSolid) {
-          if (other === entity || !other.get(P) || !other.get(R)) continue;
+          if (other === entity || riders.includes(other) || !other.get(P) || !other.get(R)) continue;
           const op = other.get(P).position, oh = other.get(R);
           const otherTop = op.y + oh.offset.y, otherBottom = otherTop + oh.size.y;
           if (bottom <= otherTop + 0.5 || top >= otherBottom - 0.5) continue;
           const otherLeft = op.x + oh.offset.x, otherRight = otherLeft + oh.size.x;
           const oldLeft = platformPos.x + platformHit.offset.x, oldRight = oldLeft + platformHit.size.x;
-          const newLeft = nextX + platformHit.offset.x, newRight = newLeft + platformHit.size.x;
-          if (frameDelta > 0 && oldRight <= otherLeft + 0.5 && newRight > otherLeft) {
-            nextX = otherLeft - platformHit.offset.x - platformHit.size.x; hitWall = true; break;
-          }
-          if (frameDelta < 0 && oldLeft >= otherRight - 0.5 && newLeft < otherRight) {
-            nextX = otherRight - platformHit.offset.x; hitWall = true; break;
+          const newLeft = oldLeft + allowedDelta, newRight = oldRight + allowedDelta;
+          if (allowedDelta > 0 && oldRight <= otherLeft + 0.5 && newRight > otherLeft) {
+            allowedDelta = otherLeft - oldRight;
+          } else if (allowedDelta < 0 && oldLeft >= otherRight - 0.5 && newLeft < otherRight) {
+            allowedDelta = otherRight - oldLeft;
           }
         }
-        // No artificial travel limit: reverse only when a solid obstacle is hit.
-        const deltaX = nextX - startX;
-        platformPos.x = nextX;
-        if (hitWall) block.direction *= -1;
-        if (deltaX) for (const rider of riders) {
-          const rp = rider.get(P).position;
-          rp.x += deltaX;
+        // A platform must never teleport its rider through a wall. Clamp to the
+        // nearest obstruction across the rider's full collision box as well.
+        for (const rider of riders) {
+          const rp = rider.get(P).position, rh = rider.get(R);
+          const riderLeft = rp.x + rh.offset.x, riderRight = riderLeft + rh.size.x;
+          for (const other of allSolid) {
+            if (other === entity || other === rider || riders.includes(other) || !other.get(P) || !other.get(R)) continue;
+            const op = other.get(P).position, oh = other.get(R);
+            const otherTop = op.y + oh.offset.y, otherBottom = otherTop + oh.size.y;
+            const riderTop = rp.y + rh.offset.y, riderBottom = riderTop + rh.size.y;
+            if (riderBottom <= otherTop + 0.5 || riderTop >= otherBottom - 0.5) continue;
+            const otherLeft = op.x + oh.offset.x, otherRight = otherLeft + oh.size.x;
+            if (allowedDelta > 0 && riderRight <= otherLeft + 0.5 && riderRight + allowedDelta > otherLeft) {
+              allowedDelta = Math.min(allowedDelta, otherLeft - riderRight);
+            } else if (allowedDelta < 0 && riderLeft >= otherRight - 0.5 && riderLeft + allowedDelta < otherRight) {
+              allowedDelta = Math.max(allowedDelta, otherRight - riderLeft);
+            }
+          }
         }
+        platformPos.x += allowedDelta;
+        if (Math.abs(allowedDelta - frameDelta) > 0.001) block.direction *= -1;
+        if (allowedDelta) for (const rider of riders) rider.get(P).position.x += allowedDelta;
       }
       const b = this.O.find(R);
       for (var c of b) c.oe = c.get(P).position,
@@ -8615,11 +8629,9 @@
         const h = g.oe,
         k = g.le;
         this.j.set(h, k);
-        const m = [
-        ];
+        const m = [];
         for (const q of b) xl(this.j, q.oe, q.le) && m.push(q);
-        0 < c.o && (c.wa.x -=
-        c.wa.x * c.o * a, c.wa.y -= c.wa.y * c.o * a);
+        0 < c.o && (c.wa.x -= c.wa.x * c.o * a, c.wa.y -= c.wa.y * c.o * a);
         c.j.x += c.wa.x * a;
         c.j.y += c.wa.y * a;
         var d = void 0;
@@ -8633,7 +8645,7 @@
           h.x += q;
           c.j.x -= q;
           this.j.set(h, k);
-          for (const t of b) t !== g && t.O === this.O && - 1 === m.indexOf(t) && xl(this.j, t.oe, t.le) && (this.o(this.O, q, 0, g, t), this.j.set(h, k))
+          for (const t of b) t !== g && t.O === this.O && -1 === m.indexOf(t) && xl(this.j, t.oe, t.le) && (this.o(this.O, q, 0, g, t), this.j.set(h, k))
         }
         for (e = d = 0; p && 1 <= Math.abs(c.j.y); ) {
           f = rl(c.j.y);
@@ -8643,7 +8655,7 @@
           h.y += f;
           c.j.y -= f;
           this.j.set(h, k);
-          for (const q of b) q !== g && q.O === this.O && - 1 === m.indexOf(q) && xl(this.j, q.oe, q.le) && (this.o(this.O, 0, f, g, q), this.j.set(h, k))
+          for (const q of b) q !== g && q.O === this.O && -1 === m.indexOf(q) && xl(this.j, q.oe, q.le) && (this.o(this.O, 0, f, g, q), this.j.set(h, k))
         }
       }
     }
@@ -8735,28 +8747,31 @@
       this.direction = 1;
     }
   };
-  // Temporary theme-aware pixel-art moving platform. Draw at 2x the standard 16px tile size.
+  // Draw at the same 48x48 source-pixel scale as the original Doodle tiles.
+  // The game's world transform scales these 48 source pixels to one 16-unit tile.
   function drawMovingBlock(ctx) {
     ctx.save();
     ctx.imageSmoothingEnabled = false;
-    var palette = {
+    const palettes = {
       1: ['#18233d', '#4b6a9b', '#82baff', '#5275aa', '#a9d9ff', '#30466f'],
       2: ['#202020', '#555555', '#dddddd', '#888888', '#ffffff', '#333333'],
       3: ['#39251d', '#865333', '#d5a15d', '#a96c38', '#ffe0a0', '#5a3827'],
       4: ['#182b20', '#39744a', '#73bf72', '#4c985c', '#c5ffc0', '#244a31'],
       5: ['#281b3e', '#6947a1', '#ba83ff', '#8559ca', '#f0d6ff', '#402d64']
-    }[Qg] || ['#18233d', '#4b6a9b', '#82baff', '#5275aa', '#a9d9ff', '#30466f'];
-    ctx.fillStyle = palette[0]; ctx.fillRect(0, 0, 32, 32);
-    ctx.fillStyle = palette[1]; ctx.fillRect(2, 2, 28, 6);
-    ctx.fillStyle = palette[2]; ctx.fillRect(4, 8, 24, 4);
-    ctx.fillStyle = palette[3]; ctx.fillRect(2, 12, 28, 14);
-    ctx.fillStyle = palette[4]; ctx.fillRect(6, 14, 6, 4); ctx.fillRect(20, 14, 6, 4);
-    ctx.fillStyle = palette[5]; ctx.fillRect(0, 26, 32, 6);
-    ctx.fillStyle = palette[4]; ctx.fillRect(4, 28, 6, 2); ctx.fillRect(22, 28, 6, 2);
+    };
+    const palette = palettes[Qg] || palettes[1];
+    ctx.fillStyle = palette[0]; ctx.fillRect(0, 0, 48, 48);
+    ctx.fillStyle = palette[1]; ctx.fillRect(3, 3, 42, 9);
+    ctx.fillStyle = palette[2]; ctx.fillRect(6, 12, 36, 6);
+    ctx.fillStyle = palette[3]; ctx.fillRect(3, 18, 42, 21);
+    ctx.fillStyle = palette[4];
+    ctx.fillRect(9, 21, 9, 6); ctx.fillRect(30, 21, 9, 6);
+    ctx.fillStyle = palette[5]; ctx.fillRect(0, 39, 48, 9);
+    ctx.fillStyle = palette[4]; ctx.fillRect(6, 42, 9, 3); ctx.fillRect(33, 42, 9, 3);
     ctx.restore();
   }
   var T = new Map;
-  T.set(30, (a, b) => new x(new P(new C(a, b), 0, new C(O, O)), new D(new Na(drawMovingBlock), 0), new R(new C(32, 32)), new MovingBlock(a, a - 48, a + 48)));
+  T.set(30, (a, b) => new x(new P(new C(a, b), 0, new C(O, O)), new D(new Na(drawMovingBlock), 0), new R(new C(16, 16)), new MovingBlock(a, a - 48, a + 48)));
   T.set(5, (a, b) =>{
     const c = G();
     return new x(new P(new C(a, b), 0, new C(O, O)), ...Cl(c.Na, 0), new R(new C(16, 16)))
@@ -18812,9 +18827,9 @@
     #play-button {
       display: block;
       position: absolute;
-      left: 88px;
-      width: 150px;
-      height: 36px;
+      left: 132px;
+      width: 180px;
+      height: 42px;
       z-index: 1000;
       pointer-events: auto;
       cursor: pointer;
@@ -18827,11 +18842,11 @@
     }
 
     #play-button {
-      top: 410px;
+      top: 430px;
     }
 
     #edit-button {
-      top: 462px;
+      top: 482px;
     }
 
     #edit-container,
