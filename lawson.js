@@ -12199,8 +12199,13 @@
       blink.Yc = !blink.Yc;
       entity.get(D).Xa = Va(blink.Yc ? theme.blink.Xc : theme.blink.Na);
     }
-    // Keep switch-triggered piston work bounded and deterministic. A piston
-    // extends upward one tile; only movable blocks can be pushed.
+    // Do() calls this when a switch is pressed; io.H() calls it again when
+    // the switch is released. The latter must only retract piston visuals:
+    // it must never run the block-pushing pass a second time.
+    const activating = a.find(nj).some(e => {
+      const state = e.get(nj);
+      return state && state.j.length > 0;
+    });
     const all = a.find(R, P);
     const box = e => {
       const p = e.get(P).position, h = e.get(R);
@@ -12211,14 +12216,15 @@
       a.top < b.bottom - 0.01 && a.bottom > b.top + 0.01;
     const movable = e => !!(e.get(MovingBlock) || e.get(hj));
     for (const entity of a.find(PistonBlock, P, R)) {
-      const piston = entity.get(PistonBlock), pos = entity.get(P).position;
-      if (piston.extended) {
-        // Retraction is just a state change. Do not relocate the pulled block:
-        // attempting to force it into the piston tile caused collision loops.
+      const piston = entity.get(PistonBlock);
+      if (!activating) {
+        // Switch release: change only the state. Moving blocks stay where the
+        // push left them, so collision resolution cannot trap the game here.
         piston.extended = false;
         piston.pulled = null;
         continue;
       }
+      if (piston.extended) continue;
       const pistonBox = box(entity);
       const target = { left: pistonBox.left, right: pistonBox.right,
         top: pistonBox.top - 16, bottom: pistonBox.top };
