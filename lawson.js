@@ -8563,6 +8563,17 @@
     H(a) {
       const movingEntities = this.O.find(MovingBlock, P, R);
       const allSolid = this.O.find(R, P);
+      // Platforms only stop against real solid geometry. Characters (S), water,
+      // one-ways, pickups, triggers and currently-open blink gates are not walls.
+      const isPlatformWall = other => {
+        if (other.Rc.has(S)) return false;
+        if (other.Rc.has(WaterBlock) || other.Rc.has(OneWayBlock)) return false;
+        if (other.Rc.has(tj) || other.Rc.has(uj) || other.Rc.has(vj) || other.Rc.has(ej)) return false;
+        if (other.Rc.has(jj) || other.Rc.has(nj) || other.Rc.has(rj) || other.Rc.has(sj)) return false;
+        if (other.Rc.has(oj) && true === other.get(oj).Yc) return false;
+        return true;
+      };
+      const walls = movingEntities.length ? allSolid.filter(isPlatformWall) : allSolid;
       for (const entity of movingEntities) {
         const block = entity.get(MovingBlock);
         const platformPos = entity.get(P).position;
@@ -8587,7 +8598,7 @@
         }
         let allowedDelta = frameDelta;
         // Clamp the platform itself against solid geometry.
-        for (const other of allSolid) {
+        for (const other of walls) {
           if (other === entity || riders.includes(other) || !other.get(P) || !other.get(R)) continue;
           const op = other.get(P).position, oh = other.get(R);
           const otherTop = op.y + oh.offset.y, otherBottom = otherTop + oh.size.y;
@@ -8606,7 +8617,7 @@
         for (const rider of riders) {
           const rp = rider.get(P).position, rh = rider.get(R);
           const riderLeft = rp.x + rh.offset.x, riderRight = riderLeft + rh.size.x;
-          for (const other of allSolid) {
+          for (const other of walls) {
             if (other === entity || other === rider || riders.includes(other) || !other.get(P) || !other.get(R)) continue;
             const op = other.get(P).position, oh = other.get(R);
             const otherTop = op.y + oh.offset.y, otherBottom = otherTop + oh.size.y;
@@ -8620,6 +8631,9 @@
             }
           }
         }
+        // Respect the patrol bounds configured at spawn (origin +/- range).
+        if (allowedDelta > 0 && platLeft + allowedDelta > block.right) allowedDelta = Math.max(0, block.right - platLeft);
+        else if (allowedDelta < 0 && platLeft + allowedDelta < block.left) allowedDelta = Math.min(0, block.left - platLeft);
         platformPos.x += allowedDelta;
         if (Math.abs(allowedDelta - frameDelta) > 0.001) block.direction *= -1;
         if (allowedDelta) for (const rider of riders) rider.get(P).position.x += allowedDelta;
@@ -8631,7 +8645,7 @@
         if (block.falling) {
           block.fallSpeed = Math.min(0.9, block.fallSpeed + 0.0012 * a);
           pos.y += block.fallSpeed * a;
-          if (pos.y > 1200) { pos.y = 1200; block.stoodFor = -1; }
+          if (pos.y > 1200) { z(this.O, entity); continue; }
           continue;
         }
         let stoodOn = false;
@@ -8824,22 +8838,29 @@
   }
   // Water is a seamless, animated volume: it has no solid collision surface.
   var WaterBlock = class extends u {};
+  var _waterCacheT = -1, _waterCacheList = null;
   function drawWaterBlock(ctx, entity) {
     ctx.save(); ctx.imageSmoothingEnabled = false;
     // Clip all animation to this tile so no ripple or bubble can draw beyond its edges.
     ctx.beginPath(); ctx.rect(0, 0, 48, 48); ctx.clip();
     const t = Date.now() * 0.001;
     let waterAbove = false;
-    if (entity && entity.O) {
+    // Real placed tiles have P and R; the editor hover preview has neither,
+    // so guard before touching them (it used to crash the render loop).
+    if (entity && entity.O && entity.Rc && entity.Rc.has(P) && entity.Rc.has(R)) {
       const pos = entity.get(P).position, rect = entity.get(R);
       const left = pos.x + rect.offset.x, top = pos.y + rect.offset.y;
-      waterAbove = entity.O.find(WaterBlock, P, R).some(other => {
-        if (other === entity) return false;
-        const op = other.get(P).position, or = other.get(R);
-        const ol = op.x + or.offset.x, ot = op.y + or.offset.y;
-        const ob = ot + or.size.y;
-        return Math.abs(ob - top) < 1.5 && ol < left + rect.size.x && ol + or.size.x > left;
-      });
+      // One full water scan per millisecond-tick (i.e. once per frame) shared
+      // by every tile, instead of one scan per tile.
+      if (_waterCacheT !== t) {
+        _waterCacheT = t;
+        _waterCacheList = entity.O.find(WaterBlock, P, R).map(other => {
+          const op = other.get(P).position, or = other.get(R);
+          const ol = op.x + or.offset.x, ot = op.y + or.offset.y;
+          return [ol, ol + or.size.x, ot + or.size.y];
+        });
+      }
+      waterAbove = _waterCacheList.some(w => Math.abs(w[2] - top) < 1.5 && w[0] < left + rect.size.x && w[1] > left);
     }
     ctx.fillStyle = '#087eb2'; ctx.fillRect(0, 0, 48, 48);
     // Only exposed water surfaces get a darker top; stacked tiles stay visually continuous.
@@ -18816,7 +18837,13 @@
             @click=
       ${ (event) => { event.preventDefault(); event.stopPropagation(); Y(this, 'change-mode-edit'); Y(this, 'snap-editor-camera'); } }
             title=
-      ${ W('button_edit_game') }>
+      ${ W('button_edit_game') }
+            .iconIdle=
+      ${ [0, 1301, 477, 90, 21] }
+            .iconHover=
+      ${ [0, 0, 481, 90, 21] }
+            .iconActive=
+      ${ [0, 1340, 161, 90, 18] }>
           <div id='edit-container'>
             <div id='edit-text-container'>
               
@@ -18829,7 +18856,13 @@
             @click=
       ${ (event) => { event.preventDefault(); event.stopPropagation(); Y(this, 'change-mode-play'); } }
             title=
-      ${ W('button_play_game') }>
+      ${ W('button_play_game') }
+            .iconIdle=
+      ${ [0, 93, 481, 90, 21] }
+            .iconHover=
+      ${ [0, 186, 495, 90, 21] }
+            .iconActive=
+      ${ [0, 905, 497, 90, 18] }>
             <div id='play-container'>
               <div id='play-text-container'>
                 
@@ -19011,30 +19044,16 @@
       height: 180px;
     }
 
-    #edit-button,
-    #play-button {
-      display: block;
-      position: absolute;
-      left: 132px;
-      width: 180px;
-      height: 42px;
-      z-index: 1000;
-      pointer-events: auto;
-      cursor: pointer;
-    }
-
-    .cartridges,
-    .cartridges-title,
-    .scrollBar {
-      z-index: 1;
-    }
-
-    #play-button {
-      top: 430px;
-    }
-
     #edit-button {
-      top: 482px;
+      position: absolute;
+      left: 60px;
+      top: 458px;
+    }
+
+    #play-button {
+      position: absolute;
+      left: 60px;
+      top: 395px;
     }
 
     #edit-container,
