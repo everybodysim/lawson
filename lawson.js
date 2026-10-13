@@ -8666,7 +8666,7 @@
           h.x += q;
           c.j.x -= q;
           this.j.set(h, k);
-          for (const t of b) if (t !== g && t.O === this.O && -1 === m.indexOf(t)) { const oneWay = t.Rc.has(OneWayBlock); if (!oneWay && xl(this.j, t.oe, t.le)) { this.o(this.O, q, 0, g, t); this.j.set(h, k); } }
+          for (const t of b) if (t !== g && t.O === this.O && -1 === m.indexOf(t)) { const oneWay = t.Rc.has(OneWayBlock); if (!oneWay && !t.Rc.has(WaterBlock) && xl(this.j, t.oe, t.le)) { this.o(this.O, q, 0, g, t); this.j.set(h, k); } }
         }
         for (e = d = 0; p && 1 <= Math.abs(c.j.y); ) {
           f = rl(c.j.y);
@@ -8676,7 +8676,7 @@
           h.y += f;
           c.j.y -= f;
           this.j.set(h, k);
-          for (const q of b) if (q !== g && q.O === this.O && -1 === m.indexOf(q)) { const oneWay = q.Rc.has(OneWayBlock); const qTop = q.oe.y + q.le.offset.y; const priorBottom = h.y - f + k.offset.y + k.size.y; if ((!oneWay || (f > 0 && priorBottom <= qTop + 0.6)) && xl(this.j, q.oe, q.le)) { this.o(this.O, 0, f, g, q); this.j.set(h, k); } }
+          for (const q of b) if (q !== g && q.O === this.O && -1 === m.indexOf(q)) { const oneWay = q.Rc.has(OneWayBlock); const water = q.Rc.has(WaterBlock); const qTop = q.oe.y + q.le.offset.y; const priorBottom = h.y - f + k.offset.y + k.size.y; if (!water && (!oneWay || (f > 0 && priorBottom <= qTop + 0.6)) && xl(this.j, q.oe, q.le)) { this.o(this.O, 0, f, g, q); this.j.set(h, k); } }
         }
       }
     }
@@ -8819,7 +8819,24 @@
     ctx.fillStyle=p[2];ctx.fillRect(9,39,9,3);ctx.fillRect(30,42,9,3);
     ctx.restore();
   }
+  // Water is a seamless, animated volume: it has no solid collision surface.
+  var WaterBlock = class extends u {};
+  function drawWaterBlock(ctx) {
+    ctx.save(); ctx.imageSmoothingEnabled = false;
+    const t = Date.now() * 0.001;
+    ctx.fillStyle = '#075a91'; ctx.fillRect(0, 0, 48, 48);
+    ctx.fillStyle = '#087eb2'; ctx.fillRect(0, 12, 48, 36);
+    ctx.fillStyle = '#129dca';
+    for (let y = 15; y < 48; y += 9) { const shift = Math.floor((t * 8 + y * 1.7) % 12); for (let x = -12 + shift; x < 48; x += 24) ctx.fillRect(x, y, 12, 3); }
+    // Moving internal ripples instead of a hard border make adjoining tiles blend together.
+    ctx.fillStyle = '#39d8e9';
+    for (let band = 0; band < 3; band++) for (let x = 0; x < 48; x += 3) { const wave = Math.sin((x / 48) * Math.PI * 4 + t * (2.1 + band * 0.2) + band * 1.9) * 1.5; if ((Math.floor(x / 3) + band) % 3 !== 0) ctx.fillRect(x, 7 + band * 16 + Math.round(wave), 3, 2); }
+    ctx.fillStyle = '#a5fbff';
+    for (let i = 0; i < 5; i++) { const phase = t * (0.55 + i * 0.07) + i * 2.399; const x = 5 + ((Math.sin(phase * 1.31 + i) + 1) * 0.5) * 38; const y = 14 + ((Math.sin(phase * 0.83 + i * 2) + 1) * 0.5) * 28; const size = i % 2 ? 2 : 3; ctx.fillRect(Math.round(x), Math.round(y), size, size); if (i % 2 === 0) { ctx.fillStyle = '#37cce4'; ctx.fillRect(Math.round(x), Math.round(y) + size, size, 2); ctx.fillStyle = '#a5fbff'; } }
+    ctx.restore();
+  }
   var T = new Map;
+  T.set(33, (a, b) => new x(new P(new C(a, b), 0, new C(O, O)), new D(new Na(drawWaterBlock), 0), new R(new C(16, 16)), new WaterBlock));
   T.set(30, (a, b) => new x(new P(new C(a, b), 0, new C(O, O)), new D(new Na(drawMovingBlock), 0), new R(new C(16, 16)), new MovingBlock(a, a - 48, a + 48)));
   T.set(31, (a, b) => new x(new P(new C(a, b), 0, new C(O, O)), new D(new Na(drawOneWayBlock), 0), new R(new C(16, 8)), new OneWayBlock));
   T.set(32, (a, b) => new x(new P(new C(a, b), 0, new C(O, O)), new D(new Na(drawCrumblingBlock), 0), new R(new C(16, 16)), new CrumblingBlock));
@@ -15826,6 +15843,7 @@
     movingBlock: sf,
     oneWayBlock: sf,
     crumblingBlock: sf,
+    waterBlock: sf,
     breakable: Ff,
     goal: uf,
     coin: lf,
@@ -15984,6 +16002,7 @@
         20
       ]
     },
+    waterBlock: { N: [0, 1453, 1061, 20, 20], Aa: [0, 1453, 1084, 20, 20], active: [0, 945, 320, 20, 20] },
     movingBlock: {
       N: [0, 1428, 1514, 20, 20],
       Aa: [0, 1428, 1537, 20, 20],
@@ -16641,13 +16660,15 @@
     const palettes = {
       movingBlock: {1:['#18233d','#4b6a9b','#82baff','#5275aa','#a9d9ff','#30466f'],2:['#202020','#555555','#dddddd','#888888','#ffffff','#333333'],3:['#39251d','#865333','#d5a15d','#a96c38','#ffe0a0','#5a3827'],4:['#182b20','#39744a','#73bf72','#4c985c','#c5ffc0','#244a31'],5:['#281b3e','#6947a1','#ba83ff','#8559ca','#f0d6ff','#402d64']},
       oneWayBlock: {1:['#173b4a','#3ca5ba','#91f0ff','#287b91'],2:['#333333','#777777','#eeeeee','#555555'],3:['#5b3b20','#b27b3c','#f6d28b','#855326'],4:['#1c4930','#54a968','#b7ffb4','#347744'],5:['#39235e','#9868d8','#e0c8ff','#67429b']},
-      crumblingBlock: {1:['#633b28','#b7774a','#f5c58c','#3a2730'],2:['#454545','#999999','#eeeeee','#292929'],3:['#70401f','#c7833e','#ffe0a1','#422719'],4:['#34542b','#8da84d','#e0ee9b','#273d22'],5:['#4b2d66','#a779bf','#f0d1ff','#342040']}
+      crumblingBlock: {1:['#633b28','#b7774a','#f5c58c','#3a2730'],2:['#454545','#999999','#eeeeee','#292929'],3:['#70401f','#c7833e','#ffe0a1','#422719'],4:['#34542b','#8da84d','#e0ee9b','#273d22'],5:['#4b2d66','#a779bf','#f0d1ff','#342040']},
+      waterBlock: {1:['#075a91','#087eb2','#39d8e9','#a5fbff'],2:['#263b4d','#526f89','#b6d9f4','#eafaff'],3:['#075a91','#087eb2','#39d8e9','#a5fbff'],4:['#075a91','#087eb2','#39d8e9','#a5fbff'],5:['#173c86','#2875c9','#72c9ff','#d7f6ff']}
     };
     if (!palettes[tool]) return '';
     const p = palettes[tool][Qg] || palettes[tool][1];
     let art = '';
     if (tool === 'movingBlock') art = `<rect width="48" height="48" fill="${p[0]}"/><rect x="3" y="3" width="42" height="9" fill="${p[1]}"/><rect x="6" y="12" width="36" height="6" fill="${p[2]}"/><rect x="3" y="18" width="42" height="21" fill="${p[3]}"/><rect x="9" y="21" width="9" height="6" fill="${p[4]}"/><rect x="30" y="21" width="9" height="6" fill="${p[4]}"/><rect y="39" width="48" height="9" fill="${p[5]}"/><rect x="6" y="42" width="9" height="3" fill="${p[4]}"/><rect x="33" y="42" width="9" height="3" fill="${p[4]}"/>`;
     else if (tool === 'oneWayBlock') art = `<rect width="48" height="24" fill="${p[0]}"/><rect x="3" y="3" width="42" height="6" fill="${p[1]}"/><rect x="6" y="9" width="36" height="3" fill="${p[2]}"/><rect y="18" width="48" height="6" fill="${p[3]}"/><rect x="6" y="21" width="9" height="3" fill="${p[2]}"/><rect x="33" y="21" width="9" height="3" fill="${p[2]}"/>`;
+    else if (tool === 'waterBlock') art = `<rect width="48" height="48" fill="${p[0]}"/><rect y="12" width="48" height="36" fill="${p[1]}"/><path fill="${p[2]}" d="M0 7h12v3H0zM18 5h12v3H18zM36 7h12v3H36zM3 22h12v3H3zM27 31h12v3H27z"/><g fill="${p[3]}"><rect x="9" y="16" width="3" height="3"/><rect x="34" y="26" width="3" height="3"/><rect x="20" y="39" width="2" height="2"/></g>`;
     else art = `<rect width="48" height="48" fill="${p[0]}"/><path fill="${p[1]}" d="M3 3h42v9H3zM3 15h18v9H3zM27 15h18v9H27z"/><path fill="${p[2]}" d="M6 6h36v3H6zM6 18h12v3H6zM30 18h12v3H30zM9 39h9v3H9zM30 42h9v3h-9z"/><path fill="${p[3]}" d="M21 12h6v15h-6zM12 27h6v9h-6zM30 30h6v9h-6z"/>`;
     return `url("data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" shape-rendering="crispEdges">${art}</svg>`)}") center / contain no-repeat`;
   }
@@ -16661,6 +16682,7 @@
     movingBlock: 30,
     oneWayBlock: 31,
     crumblingBlock: 32,
+    waterBlock: 33,
     breakable: 6,
     goal: 7,
     coin: 9,
@@ -16701,6 +16723,7 @@
     movingBlock: 'tool_moving_block',
     oneWayBlock: 'tool_one_way_block',
     crumblingBlock: 'tool_crumbling_block',
+    waterBlock: 'tool_water_block',
     breakable: 'tool_breakable',
     goal: 'tool_goal',
     coin: 'tool_coin',
@@ -16752,7 +16775,7 @@
   };
   function Rr(a) {
     const tool = a.j.oa.tool;
-    const customDraw = { movingBlock: drawMovingBlock, oneWayBlock: drawOneWayBlock, crumblingBlock: drawCrumblingBlock }[tool];
+    const customDraw = { movingBlock: drawMovingBlock, oneWayBlock: drawOneWayBlock, crumblingBlock: drawCrumblingBlock, waterBlock: drawWaterBlock }[tool];
     a.v.get(D).Xa = customDraw ? new Na(customDraw) : Ta(Mr[tool])
   }
   function Sr(a, b) {
@@ -17176,7 +17199,23 @@
       for (var k of this.O.find(N, P)) {
         var m = k.get(S).wa;
         const p = k.get(N);
-        p.bc ? (m.x = 0, p.Te ? (m.y += 0.0008 * a, m.y = Math.min(m.y, 0.3), os(k, p, m)) : m.y = 0) : (m.x = 0.1 * g, 0 > m.x && (p.j = !0), 0 < m.x && (p.j = !1), m.y += 0.0008 * a, m.y = Math.min(m.y, 0.3), f && p.o && !p.bc && (m.y = - 0.26), os(k, p, m), p.o = !1)
+        const water = this.O.find(WaterBlock, P, R).some(w => {
+          const wp = w.get(P).position, wr = w.get(R), kp = k.get(P).position, kr = k.get(R);
+          return kp.x + kr.offset.x < wp.x + wr.offset.x + wr.size.x && kp.x + kr.offset.x + kr.size.x > wp.x + wr.offset.x && kp.y + kr.offset.y < wp.y + wr.offset.y + wr.size.y && kp.y + kr.offset.y + kr.size.y > wp.y + wr.offset.y;
+        });
+        if (p.bc) { m.x = 0; if (p.Te) { m.y += 0.0008 * a; m.y = Math.min(m.y, 0.3); os(k, p, m); } else m.y = 0; }
+        else if (water) {
+          // Water damps momentum, cancels most gravity, and lets up/down steer vertically.
+          m.x = 0.075 * g;
+          if (m.x < 0) p.j = !0; else if (m.x > 0) p.j = !1;
+          m.y = ql(-0.17, 0.17, m.y * 0.82 + 0.075 * h + 0.00012 * a);
+          if (f && p.o) m.y = -0.14;
+          os(k, p, m); p.o = !1;
+        } else {
+          m.x = 0.1 * g; 0 > m.x && (p.j = !0); 0 < m.x && (p.j = !1);
+          m.y += 0.0008 * a; m.y = Math.min(m.y, 0.3);
+          f && p.o && !p.bc && (m.y = -0.26); os(k, p, m); p.o = !1;
+        }
       }
       for (const p of this.O.find(Fj, P)) a = p.get(Fj),
       f = p.get(S).wa,
@@ -18013,6 +18052,7 @@
           'movingBlock',
           'oneWayBlock',
           'crumblingBlock',
+          'waterBlock',
           'breakable',
           'pushableSolid',
           'fire'
@@ -18078,7 +18118,7 @@
                     @mouseout=
       ${ this.H }
                     title=
-      ${ 'movingBlock' === c ? 'Moving Block' : W(Pr[c]) || ('oneWayBlock' === c ? 'One-Way Platform' : 'crumblingBlock' === c ? 'Crumbling Block' : '') }
+      ${ 'movingBlock' === c ? 'Moving Block' : W(Pr[c]) || ('oneWayBlock' === c ? 'One-Way Platform' : 'crumblingBlock' === c ? 'Crumbling Block' : 'waterBlock' === c ? 'Water' : '') }
                     ?pressed=
       ${ c === a.selected }
                     .value=
@@ -18221,7 +18261,7 @@
       a.target instanceof mt && (this.tool = a.target.tool)
     }
     Ma(a) {
-      a.target instanceof mt && (this.hoveredToolText = (a = a.target.hoveredTool) && a in Pr ? (W(Pr[a]) || ('movingBlock' === a ? 'Moving Block' : 'oneWayBlock' === a ? 'One-Way Platform' : 'crumblingBlock' === a ? 'Crumbling Block' : '')) : '');
+      a.target instanceof mt && (this.hoveredToolText = (a = a.target.hoveredTool) && a in Pr ? (W(Pr[a]) || ('movingBlock' === a ? 'Moving Block' : 'oneWayBlock' === a ? 'One-Way Platform' : 'crumblingBlock' === a ? 'Crumbling Block' : 'waterBlock' === a ? 'Water' : '')) : '');
       this.errorText = ''
     }
     Wa() {
