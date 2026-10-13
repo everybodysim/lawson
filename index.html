@@ -1028,30 +1028,5 @@
       }).call(this);
     </script>
 
-    <style id="lawson-game-fullscreen-style">
-      #ddlDomRoot:fullscreen { width:100vw!important; height:100vh!important; max-width:none!important; max-height:none!important; margin:0!important; background:#000!important; }
-      #ddlDomRoot:fullscreen #hpcanvas, #ddlDomRoot:fullscreen canvas { max-width:100vw; max-height:100vh; }
-    </style>
-    <script id="lawson-game-fullscreen">
-      (() => {
-        let requested = false;
-        function enterGameFullscreen(event) {
-          if (requested || document.fullscreenElement) return;
-          const target = event.target;
-          if (!(target instanceof Element) || !target.closest('#ctaRoot, #lawson-cta-container, .lawsonCta, #hpcanvas, #ddlDomRoot')) return;
-          const game = document.getElementById('ddlDomRoot') || document.getElementById('hplogo');
-          if (!game || typeof game.requestFullscreen !== 'function') return;
-          requested = true;
-          try {
-            const result = game.requestFullscreen({ navigationUI: 'hide' });
-            if (result && typeof result.catch === 'function') result.catch(() => { requested = false; });
-          } catch (_) { requested = false; }
-        }
-        document.addEventListener('pointerdown', enterGameFullscreen, true);
-        document.addEventListener('keydown', event => {
-          if (event.key === 'Enter' || event.key === ' ') enterGameFullscreen({target:document.activeElement});
-        }, true);
-        document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement) requested = false; });
-      })();
-    </script>
+
 
