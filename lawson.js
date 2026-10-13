@@ -8812,7 +8812,16 @@
     ctx.fillStyle = '#d6e8f7'; ctx.fillRect(9, 18, 30, 6);
     ctx.fillStyle = '#7799b8'; ctx.fillRect(9, 27, 30, 6);
     ctx.fillStyle = sticky ? '#67e6a2' : '#f5c96a'; ctx.fillRect(15, 33, 18, 6);
-    if (on) { ctx.fillStyle = '#c2d7e9'; ctx.fillRect(42, 18, 6, 12); ctx.fillStyle = sticky ? '#67e6a2' : '#f5c96a'; ctx.fillRect(45, 15, 3, 18); }
+    // High-contrast pixel arrow visibly points UP.
+    ctx.fillStyle = '#101b2a';
+    ctx.fillRect(20, 12, 8, 27); ctx.fillRect(11, 20, 26, 7);
+    ctx.fillStyle = sticky ? '#baffd6' : '#fff2b5';
+    ctx.fillRect(22, 10, 4, 24); ctx.fillRect(14, 18, 20, 5);
+    ctx.fillRect(17, 15, 14, 4); ctx.fillRect(20, 12, 8, 4);
+    if (on) {
+      ctx.fillStyle = '#c2d7e9'; ctx.fillRect(18, 0, 12, 7);
+      ctx.fillStyle = sticky ? '#67e6a2' : '#f5c96a'; ctx.fillRect(21, 0, 6, 4);
+    }
     ctx.restore();
   }
   // One-way platforms collide only when approached from above.
@@ -12226,25 +12235,35 @@
       }
       if (piston.extended) continue;
       const pistonBox = box(entity);
-      const target = { left: pistonBox.left, right: pistonBox.right,
-        top: pistonBox.top - 16, bottom: pistonBox.top };
-      const candidates = all.filter(other => other !== entity && other.get(P) &&
-        other.get(R) && overlap(target, box(other)));
-      // Work upward from the lowest block, allowing a short stack of movable
-      // blocks to move together. Never recurse, so malformed overlaps cannot hang.
-      const moving = candidates.filter(movable).sort((x, y) => box(y).top - box(x).top);
+      // Detect the adjacent occupied tile on either side of world Y so the
+      // push works regardless of the engine's world-vs-screen Y convention.
+      const sides = [
+        { dy: 16, area: { left: pistonBox.left, right: pistonBox.right,
+          top: pistonBox.bottom, bottom: pistonBox.bottom + 16 } },
+        { dy: -16, area: { left: pistonBox.left, right: pistonBox.right,
+          top: pistonBox.top - 16, bottom: pistonBox.top } }
+      ];
+      let push = null, candidates = [];
+      for (const side of sides) {
+        const found = all.filter(other => other !== entity && other.get(P) &&
+          other.get(R) && overlap(side.area, box(other)));
+        if (found.some(movable)) { push = side; candidates = found; break; }
+      }
+      if (!push) continue;
+      const moving = candidates.filter(movable).sort((x, y) =>
+        push.dy > 0 ? box(y).top - box(x).top : box(x).top - box(y).top);
       const limit = Math.min(moving.length, 8);
-      let success = candidates.length === moving.length;
+      let success = candidates.length === moving.length && moving.length > 0;
       const planned = new Map();
       for (let i = 0; success && i < limit; i++) {
         const block = moving[i], p = block.get(P).position, hit = block.get(R);
         const dest = { left: p.x + hit.offset.x, right: p.x + hit.offset.x + hit.size.x,
-          top: p.y + hit.offset.y - 16, bottom: p.y + hit.offset.y + hit.size.y - 16 };
+          top: p.y + hit.offset.y + push.dy, bottom: p.y + hit.offset.y + hit.size.y + push.dy };
         for (const other of all) {
           if (other === entity || other === block || moving.includes(other) || !other.get(P) || !other.get(R)) continue;
           if (overlap(dest, box(other))) { success = false; break; }
         }
-        if (success) planned.set(block, { x: p.x, y: p.y - 16 });
+        if (success) planned.set(block, { x: p.x, y: p.y + push.dy });
       }
       if (success) {
         for (const [block, next] of planned) {
