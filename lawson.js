@@ -12196,12 +12196,12 @@
           ];
           for (const g of f.j) g.O && !a.includes(g) && b.push(g);
           f.j = b;
-          0 === f.j.length && (go(this.O), ho(this.O), f.o = !1, v(e, new D(Va(G().Ya.ob))))
+          0 === f.j.length && (go(this.O, false), ho(this.O), f.o = !1, v(e, new D(Va(G().Ya.ob))))
         }
       }
     }
   };
-  function go(a) {
+  function go(a, switchPressed = false) {
     const blinkers = a.find(oj), theme = G();
     for (const entity of blinkers) {
       const blink = entity.get(oj);
@@ -12211,10 +12211,9 @@
 
     // A switch calls go on both press and release. Track the edge explicitly:
     // only a newly pressed switch may push; release merely resets the piston.
-    const activating = a.find(nj).some(e => {
-      const state = e.get(nj);
-      return !!(state && state.j && state.j.length);
-    });
+    // The press handler passes true explicitly. Do not infer a press from the
+    // switch's overlap list: that list is also mutated by the release handler.
+    const activating = switchPressed;
     const all = a.find(R, P);
     const box = e => {
       const p = e.get(P).position, h = e.get(R);
@@ -12637,7 +12636,7 @@
   function Do(a, b, c, d, e) {
     b = e.get(nj);
     b.j.push(d);
-    b.o || (b.o = !0, d = d.get(P).position, Ro(J.wg, d, a), v(e, new D(Va(G().Ya.Kb))), go(a), ho(a))
+    b.o || (b.o = !0, d = d.get(P).position, Ro(J.wg, d, a), v(e, new D(Va(G().Ya.Kb))), go(a, true), ho(a))
   }
   function vo(a, b, c, d, e) {
     if (w(d, pj)) d.get(Kj).Wb ? (d = d.get(P).position, Ro(J.Lc, d, a), z(a, e)) : Mo(a, b, c, d, e);
