@@ -12199,67 +12199,55 @@
       blink.Yc = !blink.Yc;
       entity.get(D).Xa = Va(blink.Yc ? theme.blink.Xc : theme.blink.Na);
     }
-    // The game's existing Switch toggles pistons and switch-controlled blocks together.
+    // Keep switch-triggered piston work bounded and deterministic. A piston
+    // extends upward one tile; only movable blocks can be pushed.
     const all = a.find(R, P);
-    const overlaps = (x1, y1, x2, y2) => x1 < x2 + 16 && x1 + 16 > x2 && y1 < y2 + 16 && y1 + 16 > y2;
-    const movable = e => !!(e.get(MovingBlock) || e.get(hj));
-    const canOccupy = (x, y, ignore) => !all.some(e => {
-      if (e === ignore || !e.get(P) || !e.get(R)) return false;
+    const box = e => {
       const p = e.get(P).position, h = e.get(R);
-      return overlaps(x, y, p.x + h.offset.x, p.y + h.offset.y);
-    });
-    const tryPush = (entity, dx, dy, seen = new Set()) => {
-      if (seen.has(entity)) return false;
-      seen.add(entity);
-      const p = entity.get(P).position, h = entity.get(R), tx = p.x + dx, ty = p.y + dy;
-      const blockers = all.filter(other => {
-        if (other === entity || !other.get(P) || !other.get(R)) return false;
-        const op = other.get(P).position, oh = other.get(R);
-        return overlaps(tx + h.offset.x, ty + h.offset.y, op.x + oh.offset.x, op.y + oh.offset.y);
-      });
-      for (const other of blockers) if (!movable(other) || !tryPush(other, dx, dy, seen)) return false;
-      p.x = tx; p.y = ty;
-      return true;
+      return { left: p.x + h.offset.x, top: p.y + h.offset.y,
+        right: p.x + h.offset.x + h.size.x, bottom: p.y + h.offset.y + h.size.y };
     };
+    const overlap = (a, b) => a.left < b.right - 0.01 && a.right > b.left + 0.01 &&
+      a.top < b.bottom - 0.01 && a.bottom > b.top + 0.01;
+    const movable = e => !!(e.get(MovingBlock) || e.get(hj));
     for (const entity of a.find(PistonBlock, P, R)) {
       const piston = entity.get(PistonBlock), pos = entity.get(P).position;
-      if (!piston.extended) {
-        // Pistons push UP by one tile. Test the cell above the piston and move
-        // supported movable blocks vertically, keeping their original X position.
-        const tx = pos.x, ty = pos.y - 16;
-        const occupants = all.filter(other => {
-          if (other === entity || !other.get(P) || !other.get(R)) return false;
-          const p = other.get(P).position, h = other.get(R);
-          return overlaps(tx, ty, p.x + h.offset.x, p.y + h.offset.y);
-        });
-        // Only extend when every block in the push path can move; do not leave
-        // half a stack moved if another block makes the push impossible.
-        const snapshots = new Map();
-        for (const e of all) {
-          const p = e.get(P);
-          if (p) snapshots.set(e, { x: p.position.x, y: p.position.y });
-        }
-        let success = true;
-        for (const occupant of occupants) {
-          if (!movable(occupant) || !tryPush(occupant, 0, -16, new Set())) { success = false; break; }
-        }
-        if (!success) {
-          for (const [e, p] of snapshots) {
-            const transform = e.get(P);
-            if (transform) { transform.position.x = p.x; transform.position.y = p.y; }
-          }
-        } else {
-          piston.extended = true;
-          piston.pulled = piston.sticky && occupants.length === 1 ? occupants[0] : null;
-        }
-      } else {
+      if (piston.extended) {
+        // Retraction is just a state change. Do not relocate the pulled block:
+        // attempting to force it into the piston tile caused collision loops.
         piston.extended = false;
-        if (piston.sticky && piston.pulled && piston.pulled.O) {
-          const pulled = piston.pulled, pp = pulled.get(P).position, hit = pulled.get(R);
-          const tx = pos.x - hit.offset.x, ty = pos.y - 16 - hit.offset.y;
-          if (canOccupy(tx, ty, pulled)) { pp.x = tx; pp.y = ty; }
-        }
         piston.pulled = null;
+        continue;
+      }
+      const pistonBox = box(entity);
+      const target = { left: pistonBox.left, right: pistonBox.right,
+        top: pistonBox.top - 16, bottom: pistonBox.top };
+      const candidates = all.filter(other => other !== entity && other.get(P) &&
+        other.get(R) && overlap(target, box(other)));
+      // Work upward from the lowest block, allowing a short stack of movable
+      // blocks to move together. Never recurse, so malformed overlaps cannot hang.
+      const moving = candidates.filter(movable).sort((x, y) => box(y).top - box(x).top);
+      const limit = Math.min(moving.length, 8);
+      let success = candidates.length === moving.length;
+      const planned = new Map();
+      for (let i = 0; success && i < limit; i++) {
+        const block = moving[i], p = block.get(P).position, hit = block.get(R);
+        const dest = { left: p.x + hit.offset.x, right: p.x + hit.offset.x + hit.size.x,
+          top: p.y + hit.offset.y - 16, bottom: p.y + hit.offset.y + hit.size.y - 16 };
+        for (const other of all) {
+          if (other === entity || other === block || moving.includes(other) || !other.get(P) || !other.get(R)) continue;
+          if (overlap(dest, box(other))) { success = false; break; }
+        }
+        if (success) planned.set(block, { x: p.x, y: p.y - 16 });
+      }
+      if (success) {
+        for (const [block, next] of planned) {
+          const p = block.get(P).position;
+          p.x = next.x;
+          p.y = next.y;
+        }
+        piston.extended = true;
+        piston.pulled = piston.sticky && moving.length === 1 ? moving[0] : null;
       }
     }
   }
@@ -17829,7 +17817,7 @@
       return this.j[3]
     }
     Pa() {
-      return this.j[4]
+      return this.j[4] || this.j[0]
     }
   };
   Sa = Fd.mb();
@@ -18268,7 +18256,7 @@
                     @mouseout=
       ${ this.H }
                     title=
-      ${ 'movingBlock' === c ? 'Moving Block' : W(Pr[c]) || ('oneWayBlock' === c ? 'One-Way Platform' : 'crumblingBlock' === c ? 'Crumbling Block' : 'waterBlock' === c ? 'Water' : '') }
+      ${ 'movingBlock' === c ? 'Moving Block' : W(Pr[c]) || ('oneWayBlock' === c ? 'One-Way Platform' : 'crumblingBlock' === c ? 'Crumbling Block' : 'waterBlock' === c ? 'Water' : 'piston' === c ? 'Piston' : 'stickyPiston' === c ? 'Sticky Piston' : '') }
                     ?pressed=
       ${ c === a.selected }
                     .value=
@@ -18411,7 +18399,7 @@
       a.target instanceof mt && (this.tool = a.target.tool)
     }
     Ma(a) {
-      a.target instanceof mt && (this.hoveredToolText = (a = a.target.hoveredTool) && a in Pr ? (W(Pr[a]) || ('movingBlock' === a ? 'Moving Block' : 'oneWayBlock' === a ? 'One-Way Platform' : 'crumblingBlock' === a ? 'Crumbling Block' : 'waterBlock' === a ? 'Water' : '')) : '');
+      a.target instanceof mt && (this.hoveredToolText = (a = a.target.hoveredTool) && a in Pr ? (W(Pr[a]) || ('movingBlock' === a ? 'Moving Block' : 'oneWayBlock' === a ? 'One-Way Platform' : 'crumblingBlock' === a ? 'Crumbling Block' : 'waterBlock' === a ? 'Water' : 'piston' === a ? 'Piston' : 'stickyPiston' === a ? 'Sticky Piston' : '')) : '');
       this.errorText = ''
     }
     Wa() {
