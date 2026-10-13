@@ -12208,12 +12208,12 @@
       blink.Yc = !blink.Yc;
       entity.get(D).Xa = Va(blink.Yc ? theme.blink.Xc : theme.blink.Na);
     }
-    // Do() calls this when a switch is pressed; io.H() calls it again when
-    // the switch is released. The latter must only retract piston visuals:
-    // it must never run the block-pushing pass a second time.
+
+    // A switch calls go on both press and release. Track the edge explicitly:
+    // only a newly pressed switch may push; release merely resets the piston.
     const activating = a.find(nj).some(e => {
       const state = e.get(nj);
-      return state && state.j.length > 0;
+      return !!(state && state.j && state.j.length);
     });
     const all = a.find(R, P);
     const box = e => {
@@ -12221,59 +12221,71 @@
       return { left: p.x + h.offset.x, top: p.y + h.offset.y,
         right: p.x + h.offset.x + h.size.x, bottom: p.y + h.offset.y + h.size.y };
     };
-    const overlap = (a, b) => a.left < b.right - 0.01 && a.right > b.left + 0.01 &&
+    const overlaps = (a, b) => a.left < b.right - 0.01 && a.right > b.left + 0.01 &&
       a.top < b.bottom - 0.01 && a.bottom > b.top + 0.01;
-    const movable = e => !!(e.get(MovingBlock) || e.get(hj));
+    // Only actual block entities are pushable. Characters, switches, and other
+    // interactive entities must never be treated as blocks.
+    const movable = e => !!(e.get(MovingBlock) || e.get(OneWayBlock) || e.get(CrumblingBlock) || e.get(hj));
     for (const entity of a.find(PistonBlock, P, R)) {
       const piston = entity.get(PistonBlock);
       if (!activating) {
-        // Switch release: change only the state. Moving blocks stay where the
-        // push left them, so collision resolution cannot trap the game here.
         piston.extended = false;
         piston.pulled = null;
+        piston.wasActive = false;
         continue;
       }
+      if (piston.wasActive) continue;
+      piston.wasActive = true;
       if (piston.extended) continue;
-      const pistonBox = box(entity);
-      // Detect the adjacent occupied tile on either side of world Y so the
-      // push works regardless of the engine's world-vs-screen Y convention.
-      const sides = [
-        { dy: 16, area: { left: pistonBox.left, right: pistonBox.right,
-          top: pistonBox.bottom, bottom: pistonBox.bottom + 16 } },
-        { dy: -16, area: { left: pistonBox.left, right: pistonBox.right,
-          top: pistonBox.top - 16, bottom: pistonBox.top } }
-      ];
-      let push = null, candidates = [];
-      for (const side of sides) {
-        const found = all.filter(other => other !== entity && other.get(P) &&
-          other.get(R) && overlap(side.area, box(other)));
-        if (found.some(movable)) { push = side; candidates = found; break; }
+
+      const pb = box(entity);
+      // The game world uses positive Y downward, so pushing UP means decreasing Y.
+      // Detect blocks that touch the piston top, with a small tolerance for offsets.
+      const candidates = all.filter(other => {
+        if (other === entity || !movable(other) || !other.get(P) || !other.get(R)) return false;
+        const ob = box(other);
+        return Math.abs(ob.bottom - pb.top) <= 1.25 &&
+          ob.right > pb.left + 1 && ob.left < pb.right - 1;
+      }).sort((x, y) => box(y).top - box(x).top);
+      if (!candidates.length) continue;
+
+      // Push a vertical stack as one unit. First validate EVERY destination before
+      // moving anything, so a wall/ceiling can never cause clipping or partial pushes.
+      const moving = [];
+      let nextTop = pb.top;
+      for (const block of candidates) {
+        const bb = box(block);
+        if (Math.abs(bb.bottom - nextTop) > 1.25) break;
+        moving.push(block);
+        nextTop = bb.top;
       }
-      if (!push) continue;
-      const moving = candidates.filter(movable).sort((x, y) =>
-        push.dy > 0 ? box(y).top - box(x).top : box(x).top - box(y).top);
-      const limit = Math.min(moving.length, 8);
-      let success = candidates.length === moving.length && moving.length > 0;
+      if (!moving.length) continue;
+
+      let canMove = true;
+      const movingSet = new Set(moving);
       const planned = new Map();
-      for (let i = 0; success && i < limit; i++) {
-        const block = moving[i], p = block.get(P).position, hit = block.get(R);
+      for (const block of moving) {
+        const p = block.get(P).position, hit = block.get(R);
         const dest = { left: p.x + hit.offset.x, right: p.x + hit.offset.x + hit.size.x,
-          top: p.y + hit.offset.y + push.dy, bottom: p.y + hit.offset.y + hit.size.y + push.dy };
+          top: p.y + hit.offset.y - 16, bottom: p.y + hit.offset.y + hit.size.y - 16 };
         for (const other of all) {
-          if (other === entity || other === block || moving.includes(other) || !other.get(P) || !other.get(R)) continue;
-          if (overlap(dest, box(other))) { success = false; break; }
+          if (other === entity || other === block || movingSet.has(other) ||
+              !other.get(P) || !other.get(R)) continue;
+          if (overlaps(dest, box(other))) { canMove = false; break; }
         }
-        if (success) planned.set(block, { x: p.x, y: p.y + push.dy });
+        if (!canMove) break;
+        planned.set(block, { x: p.x, y: p.y - 16 });
       }
-      if (success) {
-        for (const [block, next] of planned) {
-          const p = block.get(P).position;
-          p.x = next.x;
-          p.y = next.y;
-        }
-        piston.extended = true;
-        piston.pulled = piston.sticky && moving.length === 1 ? moving[0] : null;
+      if (!canMove) continue;
+
+      // Commit only after the full stack has passed collision checks.
+      for (const [block, next] of planned) {
+        const p = block.get(P).position;
+        p.x = next.x;
+        p.y = next.y;
       }
+      piston.extended = true;
+      piston.pulled = piston.sticky && moving.length === 1 ? moving[0] : null;
     }
   }
   function ho(a) {
