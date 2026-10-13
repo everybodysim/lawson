@@ -8806,7 +8806,7 @@
     ctx.fillStyle = '#d6e8f7'; ctx.fillRect(9, 18, 30, 6);
     ctx.fillStyle = '#7799b8'; ctx.fillRect(9, 27, 30, 6);
     ctx.fillStyle = sticky ? '#67e6a2' : '#f5c96a'; ctx.fillRect(15, 33, 18, 6);
-    if (on) { ctx.fillStyle = '#c2d7e9'; ctx.fillRect(42, 18, 6, 12); ctx.fillStyle = sticky ? '#67e6a2' : '#f5c96a'; ctx.fillRect(45, 15, 3, 18); }
+    if (on) { ctx.fillStyle = '#c2d7e9'; ctx.fillRect(42, 18, 24, 12); ctx.fillStyle = sticky ? '#67e6a2' : '#f5c96a'; ctx.fillRect(60, 15, 6, 18); }
     ctx.restore();
   }
   // One-way platforms collide only when approached from above.
