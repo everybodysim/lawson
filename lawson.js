@@ -8622,6 +8622,27 @@
         if (allowedDelta) for (const rider of riders) rider.get(P).position.x += allowedDelta;
       }
       const b = this.O.find(R);
+      // Update crumbling blocks before normal character collision resolution.
+      for (const entity of this.O.find(CrumblingBlock, P, R)) {
+        const block = entity.get(CrumblingBlock), pos = entity.get(P).position, hit = entity.get(R);
+        if (block.falling) {
+          block.fallSpeed = Math.min(0.9, block.fallSpeed + 0.0012 * a);
+          pos.y += block.fallSpeed * a;
+          if (pos.y > 1200) { pos.y = 1200; block.stoodFor = -1; }
+          continue;
+        }
+        let stoodOn = false;
+        const top = pos.y + hit.offset.y, left = pos.x + hit.offset.x, right = left + hit.size.x;
+        for (const other of this.O.find(S, P, R)) {
+          if (other === entity) continue;
+          const op = other.get(P).position, oh = other.get(R);
+          const bottom = op.y + oh.offset.y + oh.size.y;
+          const ol = op.x + oh.offset.x, or = ol + oh.size.x;
+          if (Math.abs(bottom - top) <= 0.6 && or > left + 1 && ol < right - 1) { stoodOn = true; break; }
+        }
+        if (stoodOn) block.stoodFor += a; else block.stoodFor = 0;
+        if (block.stoodFor >= 1500) { block.falling = true; block.fallSpeed = 0.04; }
+      }
       for (var c of b) c.oe = c.get(P).position,
       c.le = c.get(R);
       for (const g of this.O.find(S)) {
@@ -8645,7 +8666,7 @@
           h.x += q;
           c.j.x -= q;
           this.j.set(h, k);
-          for (const t of b) t !== g && t.O === this.O && -1 === m.indexOf(t) && xl(this.j, t.oe, t.le) && (this.o(this.O, q, 0, g, t), this.j.set(h, k))
+          for (const t of b) if (t !== g && t.O === this.O && -1 === m.indexOf(t)) { const oneWay = t.Rc.has(OneWayBlock); if (!oneWay && xl(this.j, t.oe, t.le)) { this.o(this.O, q, 0, g, t); this.j.set(h, k); } }
         }
         for (e = d = 0; p && 1 <= Math.abs(c.j.y); ) {
           f = rl(c.j.y);
@@ -8655,7 +8676,7 @@
           h.y += f;
           c.j.y -= f;
           this.j.set(h, k);
-          for (const q of b) q !== g && q.O === this.O && -1 === m.indexOf(q) && xl(this.j, q.oe, q.le) && (this.o(this.O, 0, f, g, q), this.j.set(h, k))
+          for (const q of b) if (q !== g && q.O === this.O && -1 === m.indexOf(q)) { const oneWay = q.Rc.has(OneWayBlock); const qTop = q.oe.y + q.le.offset.y; const priorBottom = h.y - f + k.offset.y + k.size.y; if ((!oneWay || (f > 0 && priorBottom <= qTop + 0.6)) && xl(this.j, q.oe, q.le)) { this.o(this.O, 0, f, g, q); this.j.set(h, k); } }
         }
       }
     }
@@ -8770,8 +8791,38 @@
     ctx.fillStyle = palette[4]; ctx.fillRect(6, 42, 9, 3); ctx.fillRect(33, 42, 9, 3);
     ctx.restore();
   }
+  // One-way platforms collide only when approached from above.
+  var OneWayBlock = class extends u {};
+  // Crumbling platforms begin falling 1.5 seconds after a character stands on them.
+  var CrumblingBlock = class extends u {
+    constructor() { super(); this.stoodFor = 0; this.falling = false; this.fallSpeed = 0; }
+  };
+  function drawOneWayBlock(ctx) {
+    ctx.save(); ctx.imageSmoothingEnabled = false;
+    const palettes = {1:['#173b4a','#3ca5ba','#91f0ff','#287b91'],2:['#333333','#777777','#eeeeee','#555555'],3:['#5b3b20','#b27b3c','#f6d28b','#855326'],4:['#1c4930','#54a968','#b7ffb4','#347744'],5:['#39235e','#9868d8','#e0c8ff','#67429b']};
+    const p=palettes[Qg]||palettes[1];
+    ctx.fillStyle=p[0];ctx.fillRect(0,0,48,24);
+    ctx.fillStyle=p[1];ctx.fillRect(3,3,42,6);
+    ctx.fillStyle=p[2];ctx.fillRect(6,9,36,3);
+    ctx.fillStyle=p[3];ctx.fillRect(0,18,48,6);
+    ctx.fillStyle=p[2];ctx.fillRect(6,21,9,3);ctx.fillRect(33,21,9,3);
+    ctx.restore();
+  }
+  function drawCrumblingBlock(ctx) {
+    ctx.save(); ctx.imageSmoothingEnabled = false;
+    const palettes = {1:['#633b28','#b7774a','#f5c58c','#3a2730'],2:['#454545','#999999','#eeeeee','#292929'],3:['#70401f','#c7833e','#ffe0a1','#422719'],4:['#34542b','#8da84d','#e0ee9b','#273d22'],5:['#4b2d66','#a779bf','#f0d1ff','#342040']};
+    const p=palettes[Qg]||palettes[1];
+    ctx.fillStyle=p[0];ctx.fillRect(0,0,48,48);
+    ctx.fillStyle=p[1];ctx.fillRect(3,3,42,9);ctx.fillRect(3,15,18,9);ctx.fillRect(27,15,18,9);
+    ctx.fillStyle=p[2];ctx.fillRect(6,6,36,3);ctx.fillRect(6,18,12,3);ctx.fillRect(30,18,12,3);
+    ctx.fillStyle=p[3];ctx.fillRect(21,12,6,15);ctx.fillRect(12,27,6,9);ctx.fillRect(30,30,6,9);
+    ctx.fillStyle=p[2];ctx.fillRect(9,39,9,3);ctx.fillRect(30,42,9,3);
+    ctx.restore();
+  }
   var T = new Map;
   T.set(30, (a, b) => new x(new P(new C(a, b), 0, new C(O, O)), new D(new Na(drawMovingBlock), 0), new R(new C(16, 16)), new MovingBlock(a, a - 48, a + 48)));
+  T.set(31, (a, b) => new x(new P(new C(a, b), 0, new C(O, O)), new D(new Na(drawOneWayBlock), 0), new R(new C(16, 8)), new OneWayBlock));
+  T.set(32, (a, b) => new x(new P(new C(a, b), 0, new C(O, O)), new D(new Na(drawCrumblingBlock), 0), new R(new C(16, 16)), new CrumblingBlock));
   T.set(5, (a, b) =>{
     const c = G();
     return new x(new P(new C(a, b), 0, new C(O, O)), ...Cl(c.Na, 0), new R(new C(16, 16)))
@@ -15768,6 +15819,8 @@
     ball: jf,
     solid: Cf,
     movingBlock: sf,
+    oneWayBlock: sf,
+    crumblingBlock: sf,
     breakable: Ff,
     goal: uf,
     coin: lf,
@@ -16576,6 +16629,8 @@
     ball: 4,
     solid: 5,
     movingBlock: 30,
+    oneWayBlock: 31,
+    crumblingBlock: 32,
     breakable: 6,
     goal: 7,
     coin: 9,
@@ -16614,6 +16669,8 @@
     ball: 'tool_ball',
     solid: 'tool_solid',
     movingBlock: 'tool_moving_block',
+    oneWayBlock: 'tool_one_way_block',
+    crumblingBlock: 'tool_crumbling_block',
     breakable: 'tool_breakable',
     goal: 'tool_goal',
     coin: 'tool_coin',
@@ -17922,6 +17979,8 @@
         [
           'solid',
           'movingBlock',
+          'oneWayBlock',
+          'crumblingBlock',
           'breakable',
           'pushableSolid',
           'fire'
