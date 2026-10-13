@@ -8794,36 +8794,6 @@
     ctx.fillStyle = palette[4]; ctx.fillRect(6, 42, 9, 3); ctx.fillRect(33, 42, 9, 3);
     ctx.restore();
   }
-  // Switch-driven pistons extend one tile to the right; sticky pistons can pull back.
-  var PistonBlock = class extends u {
-    constructor(sticky = false) { super(); this.sticky = sticky; this.extended = false; this.pulled = null; }
-  };
-  function drawPistonBlock(ctx, entity) {
-    ctx.save(); ctx.imageSmoothingEnabled = false;
-    // Editor previews call draw functions without a live game entity/component.
-    // Guard the component lookup so selecting or hovering a piston never crashes the toolbox.
-    const component = entity && typeof entity.get === 'function' ? entity.get(PistonBlock) : null;
-    const sticky = !!(component && component.sticky);
-    const on = !!(component && component.extended);
-    ctx.fillStyle = '#26364b'; ctx.fillRect(0, 0, 48, 48);
-    ctx.fillStyle = '#58718c'; ctx.fillRect(3, 3, 42, 42);
-    ctx.fillStyle = '#a9c8e8'; ctx.fillRect(6, 6, 36, 6);
-    ctx.fillStyle = '#30465f'; ctx.fillRect(6, 15, 36, 27);
-    ctx.fillStyle = '#d6e8f7'; ctx.fillRect(9, 18, 30, 6);
-    ctx.fillStyle = '#7799b8'; ctx.fillRect(9, 27, 30, 6);
-    ctx.fillStyle = sticky ? '#67e6a2' : '#f5c96a'; ctx.fillRect(15, 33, 18, 6);
-    // High-contrast pixel arrow visibly points UP.
-    ctx.fillStyle = '#101b2a';
-    ctx.fillRect(20, 12, 8, 27); ctx.fillRect(11, 20, 26, 7);
-    ctx.fillStyle = sticky ? '#baffd6' : '#fff2b5';
-    ctx.fillRect(22, 10, 4, 24); ctx.fillRect(14, 18, 20, 5);
-    ctx.fillRect(17, 15, 14, 4); ctx.fillRect(20, 12, 8, 4);
-    if (on) {
-      ctx.fillStyle = '#c2d7e9'; ctx.fillRect(18, 0, 12, 7);
-      ctx.fillStyle = sticky ? '#67e6a2' : '#f5c96a'; ctx.fillRect(21, 0, 6, 4);
-    }
-    ctx.restore();
-  }
   // One-way platforms collide only when approached from above.
   var OneWayBlock = class extends u {};
   // Crumbling platforms begin falling 1.5 seconds after a character stands on them.
@@ -8912,8 +8882,6 @@
   }
   var T = new Map;
   T.set(33, (a, b) => new x(new P(new C(a, b), 0, new C(O, O)), new D(new Na(drawWaterBlock), 0), new R(new C(16, 16)), new WaterBlock));
-  T.set(34, (a, b) => new x(new P(new C(a, b), 0, new C(O, O)), new D(new Na(drawPistonBlock), 0), new R(new C(16, 16)), new PistonBlock(false)));
-  T.set(35, (a, b) => new x(new P(new C(a, b), 0, new C(O, O)), new D(new Na(drawPistonBlock), 0), new R(new C(16, 16)), new PistonBlock(true)));
   T.set(30, (a, b) => new x(new P(new C(a, b), 0, new C(O, O)), new D(new Na(drawMovingBlock), 0), new R(new C(16, 16)), new MovingBlock(a, a - 48, a + 48)));
   T.set(31, (a, b) => new x(new P(new C(a, b), 0, new C(O, O)), new D(new Na(drawOneWayBlock), 0), new R(new C(16, 8)), new OneWayBlock));
   T.set(32, (a, b) => new x(new P(new C(a, b), 0, new C(O, O)), new D(new Na(drawCrumblingBlock), 0), new R(new C(16, 16)), new CrumblingBlock));
@@ -12205,73 +12173,12 @@
     const blinkers = a.find(oj), theme = G();
     for (const entity of blinkers) {
       const blink = entity.get(oj);
-      blink.Yc = !blink.Yc;
+      // Momentary switch: invert the authored on/off state only while held,
+      // then restore it on release. Repeated presses never accumulate toggles.
+      const originalState = typeof blink.originalYc === 'boolean' ? blink.originalYc : blink.Yc;
+      blink.originalYc = originalState;
+      blink.Yc = switchPressed ? !originalState : originalState;
       entity.get(D).Xa = Va(blink.Yc ? theme.blink.Xc : theme.blink.Na);
-    }
-
-    // Switch press extends pistons to the RIGHT, matching the piston artwork
-    // and original block design. Switch release only resets their activation edge.
-    const all = a.find(R, P);
-    const box = e => {
-      const p = e.get(P).position, h = e.get(R);
-      return { left:p.x+h.offset.x, top:p.y+h.offset.y,
-        right:p.x+h.offset.x+h.size.x, bottom:p.y+h.offset.y+h.size.y };
-    };
-    const overlaps = (x,y) => x.left < y.right-0.01 && x.right > y.left+0.01 &&
-      x.top < y.bottom-0.01 && x.bottom > y.top+0.01;
-    const movable = e => !!(e.get(MovingBlock) || e.get(OneWayBlock) ||
-      e.get(CrumblingBlock) || e.get(hj));
-
-    for (const entity of a.find(PistonBlock, P, R)) {
-      const piston = entity.get(PistonBlock);
-      if (!switchPressed) {
-        piston.extended = false;
-        piston.pulled = null;
-        piston.wasActive = false;
-        continue;
-      }
-      if (piston.wasActive) continue;
-      piston.wasActive = true;
-      if (piston.extended) continue;
-
-      const pb = box(entity);
-      // Collect a contiguous row of pushable blocks immediately to the piston's right.
-      const moving = [];
-      let edge = pb.right;
-      for (let depth=0; depth<32; depth++) {
-        const next = all.find(other => {
-          if (other===entity || moving.includes(other) || !movable(other)) return false;
-          const ob=box(other);
-          return Math.abs(ob.left-edge)<=1.25 &&
-            ob.bottom>pb.top+1 && ob.top<pb.bottom-1;
-        });
-        if (!next) break;
-        moving.push(next);
-        edge=box(next).right;
-      }
-      if (!moving.length) continue;
-
-      // Validate the whole row first; nothing moves if any destination is blocked.
-      const movingSet=new Set(moving), planned=[];
-      let canMove=true;
-      for (const block of moving) {
-        const p=block.get(P).position, h=block.get(R);
-        const dest={left:p.x+h.offset.x+16, right:p.x+h.offset.x+h.size.x+16,
-          top:p.y+h.offset.y, bottom:p.y+h.offset.y+h.size.y};
-        for (const other of all) {
-          if (other===entity || other===block || movingSet.has(other)) continue;
-          if (overlaps(dest,box(other))) { canMove=false; break; }
-        }
-        if (!canMove) break;
-        planned.push([block,p.x+16,p.y]);
-      }
-      if (!canMove) continue;
-      for (const [block,x,y] of planned) {
-        const p=block.get(P).position;
-        p.x=x; p.y=y;
-      }
-      piston.extended=true;
-      piston.pulled=piston.sticky && moving.length===1 ? moving[0] : null;
     }
   }
   function ho(a) {
@@ -15987,8 +15894,6 @@
     oneWayBlock: sf,
     crumblingBlock: sf,
     waterBlock: sf,
-    piston: sf,
-    stickyPiston: sf,
     breakable: Ff,
     goal: uf,
     coin: lf,
@@ -16150,8 +16055,6 @@
     waterBlock: { N: [0, 1453, 1061, 20, 20], Aa: [0, 1453, 1084, 20, 20], active: [0, 945, 320, 20, 20] },
     // Every toolbox item must have idle/hover/active sprite frames; missing entries
     // throw during template rendering and prevent the entire toolbar from rendering.
-    piston: { N: [0, 1428, 1514, 20, 20], Aa: [0, 1428, 1537, 20, 20], active: [0, 1451, 1521, 20, 20] },
-    stickyPiston: { N: [0, 1428, 1514, 20, 20], Aa: [0, 1428, 1537, 20, 20], active: [0, 1451, 1521, 20, 20] },
     movingBlock: {
       N: [0, 1428, 1514, 20, 20],
       Aa: [0, 1428, 1537, 20, 20],
@@ -16811,8 +16714,6 @@
       oneWayBlock: {1:['#173b4a','#3ca5ba','#91f0ff','#287b91'],2:['#333333','#777777','#eeeeee','#555555'],3:['#5b3b20','#b27b3c','#f6d28b','#855326'],4:['#1c4930','#54a968','#b7ffb4','#347744'],5:['#39235e','#9868d8','#e0c8ff','#67429b']},
       crumblingBlock: {1:['#633b28','#b7774a','#f5c58c','#3a2730'],2:['#454545','#999999','#eeeeee','#292929'],3:['#70401f','#c7833e','#ffe0a1','#422719'],4:['#34542b','#8da84d','#e0ee9b','#273d22'],5:['#4b2d66','#a779bf','#f0d1ff','#342040']},
       waterBlock: {1:['#075a91','#087eb2','#39d8e9','#a5fbff'],2:['#263b4d','#526f89','#b6d9f4','#eafaff'],3:['#075a91','#087eb2','#39d8e9','#a5fbff'],4:['#075a91','#087eb2','#39d8e9','#a5fbff'],5:['#173c86','#2875c9','#72c9ff','#d7f6ff']},
-      piston: {1:['#26364b','#58718c','#a9c8e8','#30465f'],2:['#292929','#666666','#eeeeee','#444444'],3:['#392a20','#805a3e','#e0bd85','#513923'],4:['#203b2a','#477a53','#a6e6a8','#31563b'],5:['#302044','#71519b','#d8bdff','#4a3268']},
-      stickyPiston: {1:['#26364b','#58718c','#67e6a2','#30465f'],2:['#292929','#666666','#eeeeee','#444444'],3:['#392a20','#805a3e','#67e6a2','#513923'],4:['#203b2a','#477a53','#b7ffb4','#31563b'],5:['#302044','#71519b','#a6f5c9','#4a3268']}
     };
     if (!palettes[tool]) return '';
     const p = palettes[tool][Qg] || palettes[tool][1];
@@ -16820,7 +16721,6 @@
     if (tool === 'movingBlock') art = `<rect width="48" height="48" fill="${p[0]}"/><rect x="3" y="3" width="42" height="9" fill="${p[1]}"/><rect x="6" y="12" width="36" height="6" fill="${p[2]}"/><rect x="3" y="18" width="42" height="21" fill="${p[3]}"/><rect x="9" y="21" width="9" height="6" fill="${p[4]}"/><rect x="30" y="21" width="9" height="6" fill="${p[4]}"/><rect y="39" width="48" height="9" fill="${p[5]}"/><rect x="6" y="42" width="9" height="3" fill="${p[4]}"/><rect x="33" y="42" width="9" height="3" fill="${p[4]}"/>`;
     else if (tool === 'oneWayBlock') art = `<rect width="48" height="24" fill="${p[0]}"/><rect x="3" y="3" width="42" height="6" fill="${p[1]}"/><rect x="6" y="9" width="36" height="3" fill="${p[2]}"/><rect y="18" width="48" height="6" fill="${p[3]}"/><rect x="6" y="21" width="9" height="3" fill="${p[2]}"/><rect x="33" y="21" width="9" height="3" fill="${p[2]}"/>`;
     else if (tool === 'waterBlock') art = `<rect width="48" height="48" fill="${p[0]}"/><rect y="12" width="48" height="36" fill="${p[1]}"/><path fill="${p[2]}" d="M0 7h12v3H0zM18 5h12v3H18zM36 7h12v3H36zM3 22h12v3H3zM27 31h12v3H27z"/><g fill="${p[3]}"><rect x="9" y="16" width="3" height="3"/><rect x="34" y="26" width="3" height="3"/><rect x="20" y="39" width="2" height="2"/></g>`;
-    else if (tool === 'piston' || tool === 'stickyPiston') art = `<rect width="48" height="48" fill="${p[0]}"/><rect x="3" y="3" width="42" height="42" fill="${p[1]}"/><rect x="6" y="15" width="36" height="27" fill="${p[3]}"/><rect x="9" y="18" width="30" height="6" fill="${p[2]}"/><rect x="9" y="27" width="30" height="6" fill="${p[1]}"/><rect x="15" y="36" width="18" height="6" fill="${p[2]}"/>`;
     else art = `<rect width="48" height="48" fill="${p[0]}"/><path fill="${p[1]}" d="M3 3h42v9H3zM3 15h18v9H3zM27 15h18v9H27z"/><path fill="${p[2]}" d="M6 6h36v3H6zM6 18h12v3H6zM30 18h12v3H30zM9 39h9v3H9zM30 42h9v3h-9z"/><path fill="${p[3]}" d="M21 12h6v15h-6zM12 27h6v9h-6zM30 30h6v9h-6z"/>`;
     return `url("data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" shape-rendering="crispEdges">${art}</svg>`)}") center / contain no-repeat`;
   }
@@ -16835,8 +16735,6 @@
     oneWayBlock: 31,
     crumblingBlock: 32,
     waterBlock: 33,
-    piston: 34,
-    stickyPiston: 35,
     breakable: 6,
     goal: 7,
     coin: 9,
@@ -16878,8 +16776,6 @@
     oneWayBlock: 'tool_one_way_block',
     crumblingBlock: 'tool_crumbling_block',
     waterBlock: 'tool_water_block',
-    piston: 'tool_piston',
-    stickyPiston: 'tool_sticky_piston',
     breakable: 'tool_breakable',
     goal: 'tool_goal',
     coin: 'tool_coin',
@@ -16931,7 +16827,7 @@
   };
   function Rr(a) {
     const tool = a.j.oa.tool;
-    const customDraw = { movingBlock: drawMovingBlock, oneWayBlock: drawOneWayBlock, crumblingBlock: drawCrumblingBlock, waterBlock: drawWaterBlock, piston: drawPistonBlock, stickyPiston: drawPistonBlock }[tool];
+    const customDraw = { movingBlock: drawMovingBlock, oneWayBlock: drawOneWayBlock, crumblingBlock: drawCrumblingBlock, waterBlock: drawWaterBlock }[tool];
     a.v.get(D).Xa = customDraw ? new Na(customDraw) : Ta(Mr[tool])
   }
   function Sr(a, b) {
@@ -18214,8 +18110,6 @@
           'oneWayBlock',
           'crumblingBlock',
           'waterBlock',
-          'piston',
-          'stickyPiston',
           'fallingSolid'
         ],
         [
@@ -18279,7 +18173,7 @@
                     @mouseout=
       ${ this.H }
                     title=
-      ${ 'movingBlock' === c ? 'Moving Block' : W(Pr[c]) || ('oneWayBlock' === c ? 'One-Way Platform' : 'crumblingBlock' === c ? 'Crumbling Block' : 'waterBlock' === c ? 'Water' : 'piston' === c ? 'Piston' : 'stickyPiston' === c ? 'Sticky Piston' : '') }
+      ${ 'movingBlock' === c ? 'Moving Block' : W(Pr[c]) || ('oneWayBlock' === c ? 'One-Way Platform' : 'crumblingBlock' === c ? 'Crumbling Block' : 'waterBlock' === c ? 'Water' : '') }
                     ?pressed=
       ${ c === a.selected }
                     .value=
@@ -18422,7 +18316,7 @@
       a.target instanceof mt && (this.tool = a.target.tool)
     }
     Ma(a) {
-      a.target instanceof mt && (this.hoveredToolText = (a = a.target.hoveredTool) && a in Pr ? (W(Pr[a]) || ('movingBlock' === a ? 'Moving Block' : 'oneWayBlock' === a ? 'One-Way Platform' : 'crumblingBlock' === a ? 'Crumbling Block' : 'waterBlock' === a ? 'Water' : 'piston' === a ? 'Piston' : 'stickyPiston' === a ? 'Sticky Piston' : '')) : '');
+      a.target instanceof mt && (this.hoveredToolText = (a = a.target.hoveredTool) && a in Pr ? (W(Pr[a]) || ('movingBlock' === a ? 'Moving Block' : 'oneWayBlock' === a ? 'One-Way Platform' : 'crumblingBlock' === a ? 'Crumbling Block' : 'waterBlock' === a ? 'Water' : '')) : '');
       this.errorText = ''
     }
     Wa() {
