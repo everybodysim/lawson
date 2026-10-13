@@ -8797,8 +8797,11 @@
   };
   function drawPistonBlock(ctx, entity) {
     ctx.save(); ctx.imageSmoothingEnabled = false;
-    const sticky = !!(entity && entity.get && entity.get(PistonBlock).sticky);
-    const on = !!(entity && entity.get && entity.get(PistonBlock).extended);
+    // Editor previews call draw functions without a live game entity/component.
+    // Guard the component lookup so selecting or hovering a piston never crashes the toolbox.
+    const component = entity && typeof entity.get === 'function' ? entity.get(PistonBlock) : null;
+    const sticky = !!(component && component.sticky);
+    const on = !!(component && component.extended);
     ctx.fillStyle = '#26364b'; ctx.fillRect(0, 0, 48, 48);
     ctx.fillStyle = '#58718c'; ctx.fillRect(3, 3, 42, 42);
     ctx.fillStyle = '#a9c8e8'; ctx.fillRect(6, 6, 36, 6);
