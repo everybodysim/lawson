@@ -8711,8 +8711,36 @@
       const b = this.O.find(R);
       // Update crumbling blocks before normal character collision resolution.
       const crumbleSolids = this.O.find(R, P);
+      // Process pending crumbling-block respawns: 5 seconds after the block
+      // fell out of the world, and only when no character is over its spot.
+      if (crumbleRespawns.length) {
+        for (let ri = crumbleRespawns.length - 1; 0 <= ri; ri--) {
+          const rr = crumbleRespawns[ri];
+          rr.wait -= a;
+          if (0 < rr.wait) continue;
+          let occupied = false;
+          for (const ch of this.O.find(S, P, R)) {
+            const cp = ch.get(P).position, chh = ch.get(R);
+            const cL = cp.x + chh.offset.x, cR = cL + chh.size.x;
+            const cT = cp.y + chh.offset.y, cB = cT + chh.size.y;
+            if (cR > rr.x + 0.5 && cL < rr.x + 16 - 0.5 && cB > rr.y - 16 && cT < rr.y + 16) { occupied = true; break; }
+          }
+          if (occupied) continue;
+          const reborn = T.get(32)(rr.x, rr.y);
+          reborn.get(CrumblingBlock).fadeIn = 600;
+          reborn.get(CrumblingBlock).spawnY = rr.y;
+          reborn.get(D).alpha = 0;
+          Ba(this.O, reborn);
+          crumbleRespawns.splice(ri, 1);
+        }
+      }
       for (const entity of this.O.find(CrumblingBlock, P, R)) {
         const block = entity.get(CrumblingBlock), pos = entity.get(P).position, hit = entity.get(R);
+        if (void 0 === block.spawnY) block.spawnY = pos.y;
+        if (0 < block.fadeIn) {
+          block.fadeIn = Math.max(0, block.fadeIn - a);
+          entity.get(D).alpha = 1 - block.fadeIn / 600;
+        }
         const myTop = pos.y + hit.offset.y, myLeft = pos.x + hit.offset.x, myRight = myLeft + hit.size.x, myBot = myTop + hit.size.y;
         if (block.falling) {
           block.fallSpeed = Math.min(0.9, block.fallSpeed + 0.0012 * a);
@@ -8741,7 +8769,11 @@
             if (!landed) pos.y += step;
           }
           if (landed) { block.falling = false; block.resting = true; block.fallSpeed = 0; }
-          else if (pos.y > 1200) { z(this.O, entity); }
+          else if (pos.y > 1200) {
+            // Fell out of the world: the block respawns at its original spot.
+            crumbleRespawns.push({ x: pos.x, y: void 0 !== block.spawnY ? block.spawnY : pos.y, wait: 5000 });
+            z(this.O, entity);
+          }
           continue;
         }
         if (block.resting) {
@@ -8939,8 +8971,11 @@ class wl {
   var OneWayBlock = class extends u {};
   // Crumbling platforms begin falling 1 second after a character stands on them.
   var CrumblingBlock = class extends u {
-    constructor() { super(); this.stoodFor = 0; this.falling = false; this.resting = false; this.fallSpeed = 0; }
+    constructor() { super(); this.stoodFor = 0; this.falling = false; this.resting = false; this.fallSpeed = 0; this.fadeIn = 0; this.spawnY = void 0; }
   };
+  // Crumbling blocks destroyed by falling out of the world come back after 5
+  // seconds, fading in, and only once nobody is standing over their spot.
+  var crumbleRespawns = [];
   function drawOneWayBlock(ctx) {
     ctx.save(); ctx.imageSmoothingEnabled = false;
     const palettes = THEME_COLORS;
@@ -11849,6 +11884,7 @@ class wl {
     return this.buffer = b
   };
   function rn(a, b) {
+    crumbleRespawns.length = 0;
     const c = a.j,
     d = new Map;
     for (const [g,
