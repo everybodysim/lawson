@@ -8689,7 +8689,7 @@
                 const sc = sw.get(nj);
                 if (!sc.j.includes(entity)) {
                   sc.j.push(entity);
-                  if (!sc.o) { sc.o = !0; go(this.O, true); ho(this.O); v(sw, new D(Va(G().Ya.Kb))); }
+                  if (!sc.o) { sc.o = !0; go(this.O); ho(this.O); v(sw, new D(Va(G().Ya.Kb))); }
                 }
               }
             }
@@ -12418,22 +12418,17 @@ class wl {
           ];
           for (const g of f.j) g.O && !a.includes(g) && b.push(g);
           f.j = b;
-          0 === f.j.length && (go(this.O, false), ho(this.O), f.o = !1, v(e, new D(Va(G().Ya.ob))))
+          0 === f.j.length && (go(this.O), ho(this.O), f.o = !1, v(e, new D(Va(G().Ya.ob))))
         }
       }
     }
   };
-  function go(a, switchPressed = false) {
-    const blinkers = a.find(oj), theme = G();
-    for (const entity of blinkers) {
-      const blink = entity.get(oj);
-      // Momentary switch: invert the authored on/off state only while held,
-      // then restore it on release. Repeated presses never accumulate toggles.
-      const originalState = typeof blink.originalYc === 'boolean' ? blink.originalYc : blink.Yc;
-      blink.originalYc = originalState;
-      blink.Yc = switchPressed ? !originalState : originalState;
-      entity.get(D).Xa = Va(blink.Yc ? theme.blink.Xc : theme.blink.Na);
-    }
+  function go(a) {
+    var b = a.find(oj);
+    a = G();
+    for (const c of b) b = c.get(oj),
+    b.Yc = !b.Yc,
+    c.get(D).Xa = Va(b.Yc ? a.blink.Xc : a.blink.Na)
   }
   function ho(a) {
     a = a.find(mj);
@@ -12782,7 +12777,7 @@ class wl {
   function Do(a, b, c, d, e) {
     b = e.get(nj);
     b.j.push(d);
-    b.o || (b.o = !0, d = d.get(P).position, Ro(J.wg, d, a), v(e, new D(Va(G().Ya.Kb))), go(a, true), ho(a))
+    b.o || (b.o = !0, d = d.get(P).position, Ro(J.wg, d, a), v(e, new D(Va(G().Ya.Kb))), go(a), ho(a))
   }
   function vo(a, b, c, d, e) {
     if (w(d, pj)) d.get(Kj).Wb ? (d = d.get(P).position, Ro(J.Lc, d, a), z(a, e)) : Mo(a, b, c, d, e);
