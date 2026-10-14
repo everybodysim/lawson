@@ -17541,13 +17541,19 @@ class wl {
             const kp = k.get(P).position, kr = k.get(R);
             const feetB = kp.y + kr.offset.y + kr.size.y;
             const feetL = kp.x + kr.offset.x, feetR = feetL + kr.size.x;
-            // Only the tile under the CENTER of the feet counts, so standing
-            // on a normal block next to (or stacked on) ice never slides.
+            // While already sliding (flag carried from the last frame), any
+            // ice still under the feet keeps the slide alive, so momentum
+            // carries the player off the edge of an ice patch. At rest, only
+            // the tile under the CENTER of the feet counts, so standing on a
+            // normal block next to (or stacked on) ice never slides.
             const feetCenter = (feetL + feetR) / 2;
+            const wasSliding = k.__ice === true;
             k.__ice = this.O.find(IceBlock, P, R).some(w => {
               const ip = w.get(P).position, ir = w.get(R);
               const iT = ip.y + ir.offset.y, iL = ip.x + ir.offset.x, iRt = iL + ir.size.x;
-              return Math.abs(iT - feetB) <= 0.6 && iRt > feetCenter && iL < feetCenter;
+              if (Math.abs(iT - feetB) > 0.6) return false;
+              return wasSliding ? iRt > feetL + 1 && iL < feetR - 1
+                : iRt > feetCenter && iL < feetCenter;
             });
           }
           if (k.__ice) {
