@@ -8976,6 +8976,21 @@ class wl {
   // Crumbling blocks destroyed by falling out of the world come back after 5
   // seconds, fading in, and only once nobody is standing over their spot.
   var crumbleRespawns = [];
+  function drawIceBlock(ctx) {
+    ctx.save(); ctx.imageSmoothingEnabled = false;
+    const palettes = THEME_COLORS;
+    const p = palettes[Qg] || palettes[1];
+    // Frosted slab: solid base, pale top band, diagonal sheen and sparkle chips.
+    ctx.fillStyle = p[0]; ctx.fillRect(0, 0, 48, 48);
+    ctx.fillStyle = p[1]; ctx.fillRect(3, 3, 42, 42);
+    ctx.fillStyle = p[2]; ctx.fillRect(3, 36, 42, 9);
+    ctx.fillStyle = p[5]; ctx.fillRect(6, 6, 12, 3); ctx.fillRect(8, 11, 6, 3);
+    ctx.fillStyle = p[2]; ctx.fillRect(30, 9, 9, 3); ctx.fillRect(34, 14, 6, 3);
+    ctx.fillStyle = p[5]; ctx.fillRect(24, 20, 15, 3); ctx.fillRect(28, 25, 11, 3);
+    ctx.fillStyle = p[2]; ctx.fillRect(6, 26, 8, 3);
+    ctx.fillStyle = p[0]; ctx.fillRect(0, 0, 48, 3); ctx.fillRect(0, 45, 48, 3); ctx.fillRect(0, 0, 3, 48); ctx.fillRect(45, 0, 3, 48);
+    ctx.restore();
+  }
   function drawOneWayBlock(ctx) {
     ctx.save(); ctx.imageSmoothingEnabled = false;
     const palettes = THEME_COLORS;
@@ -9000,6 +9015,7 @@ class wl {
   }
   // Water is a seamless, animated volume: it has no solid collision surface.
   var WaterBlock = class extends u {};
+  var IceBlock = class extends u {};
   var _waterCacheT = -1, _waterCacheList = null;
   let _waterHalf = null;
   function drawWaterBlock(ctx, entity) {
@@ -9113,6 +9129,7 @@ class wl {
   }
   var T = new Map;
   T.set(33, (a, b) => new x(new P(new C(a, b), 0, new C(O, O)), new D(new Na(drawWaterBlock), - 0.5), new R(new C(16, 16)), new WaterBlock));
+  T.set(34, (a, b) => new x(new P(new C(a, b), 0, new C(O, O)), new D(new Na(drawIceBlock), 0), new R(new C(16, 16)), new IceBlock));
   T.set(30, (a, b) => new x(new P(new C(a, b), 0, new C(O, O)), new D(new Na(drawMovingBlock), 1), new R(new C(16, 16)), new MovingBlock(a, a - 48, a + 48)));
   T.set(31, (a, b) => new x(new P(new C(a, b), 0, new C(O, O)), new D(new Na(drawOneWayBlock), 0), new R(new C(16, 8)), new OneWayBlock));
   T.set(32, (a, b) => new x(new P(new C(a, b), 0, new C(O, O)), new D(new Na(drawCrumblingBlock), 0), new R(new C(16, 16)), new CrumblingBlock));
@@ -16129,6 +16146,7 @@ class wl {
     oneWayBlock: sf,
     crumblingBlock: sf,
     waterBlock: sf,
+    iceBlock: sf,
     breakable: Ff,
     goal: uf,
     coin: lf,
@@ -16288,6 +16306,7 @@ class wl {
       ]
     },
     waterBlock: { N: [0, 1453, 1061, 20, 20], Aa: [0, 1453, 1084, 20, 20], active: [0, 945, 320, 20, 20] },
+    iceBlock: { N: [0, 1453, 1061, 20, 20], Aa: [0, 1453, 1084, 20, 20], active: [0, 945, 320, 20, 20] },
     // Every toolbox item must have idle/hover/active sprite frames; missing entries
     // throw during template rendering and prevent the entire toolbar from rendering.
     movingBlock: {
@@ -16962,7 +16981,8 @@ class wl {
       movingBlock: p => `<rect x="4" y="8" width="12" height="7" fill="${p.o}"/><rect x="5" y="9" width="10" height="5" fill="${p.m}"/><rect x="5" y="9" width="10" height="1" fill="${p.l}"/><rect x="6" y="11" width="2" height="2" fill="${p.o}"/><rect x="12" y="11" width="2" height="2" fill="${p.o}"/><rect x="2" y="10" width="1" height="3" fill="${p.m}"/><rect x="17" y="10" width="1" height="3" fill="${p.m}"/>`,
       oneWayBlock: p => `<rect x="3" y="12" width="14" height="4" fill="${p.o}"/><rect x="4" y="13" width="12" height="2" fill="${p.m}"/><rect x="4" y="13" width="12" height="1" fill="${p.l}"/><rect x="9" y="4" width="2" height="1" fill="${p.m}"/><rect x="8" y="5" width="4" height="1" fill="${p.m}"/><rect x="7" y="6" width="6" height="1" fill="${p.m}"/><rect x="9" y="7" width="2" height="4" fill="${p.m}"/>`,
       crumblingBlock: p => `<rect x="4" y="4" width="12" height="11" fill="${p.o}"/><rect x="5" y="5" width="10" height="9" fill="${p.m}"/><rect x="5" y="5" width="10" height="1" fill="${p.l}"/><rect x="9" y="5" width="1" height="2" fill="${p.o}"/><rect x="10" y="7" width="1" height="2" fill="${p.o}"/><rect x="9" y="9" width="1" height="2" fill="${p.o}"/><rect x="10" y="11" width="1" height="3" fill="${p.o}"/><rect x="6" y="16" width="2" height="1" fill="${p.m}"/><rect x="12" y="16" width="2" height="1" fill="${p.m}"/><rect x="9" y="17" width="1" height="1" fill="${p.m}"/>`,
-      waterBlock: p => `<rect x="3" y="4" width="14" height="13" fill="${p.o}"/><rect x="4" y="5" width="12" height="11" fill="${p.m}"/><rect x="4" y="5" width="12" height="1" fill="${p.l}"/><rect x="5" y="8" width="3" height="1" fill="${p.l}"/><rect x="10" y="7" width="3" height="1" fill="${p.l}"/><rect x="13" y="9" width="2" height="1" fill="${p.l}"/><rect x="6" y="11" width="3" height="1" fill="${p.l}"/><rect x="11" y="11" width="2" height="1" fill="${p.l}"/><rect x="7" y="14" width="2" height="1" fill="${p.l}"/><rect x="12" y="14" width="2" height="1" fill="${p.l}"/>`
+      waterBlock: p => `<rect x="3" y="4" width="14" height="13" fill="${p.o}"/><rect x="4" y="5" width="12" height="11" fill="${p.m}"/><rect x="4" y="5" width="12" height="1" fill="${p.l}"/><rect x="5" y="8" width="3" height="1" fill="${p.l}"/><rect x="10" y="7" width="3" height="1" fill="${p.l}"/><rect x="13" y="9" width="2" height="1" fill="${p.l}"/><rect x="6" y="11" width="3" height="1" fill="${p.l}"/><rect x="11" y="11" width="2" height="1" fill="${p.l}"/><rect x="7" y="14" width="2" height="1" fill="${p.l}"/><rect x="12" y="14" width="2" height="1" fill="${p.l}"/>`,
+      iceBlock: p => `<rect x="3" y="4" width="14" height="13" fill="${p.o}"/><rect x="4" y="5" width="12" height="11" fill="${p.m}"/><rect x="4" y="5" width="12" height="1" fill="${p.l}"/><rect x="5" y="7" width="4" height="1" fill="${p.l}"/><rect x="10" y="9" width="4" height="1" fill="${p.l}"/><rect x="6" y="11" width="4" height="1" fill="${p.l}"/><rect x="11" y="13" width="3" height="1" fill="${p.l}"/><rect x="4" y="14" width="12" height="2" fill="${p.o}"/>`
     }[tool];
     if (!art) return '';
     return `url("data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" shape-rendering="crispEdges">${frame}${art(p)}</svg>`)}") center / contain no-repeat`;
@@ -16978,6 +16998,7 @@ class wl {
     oneWayBlock: 31,
     crumblingBlock: 32,
     waterBlock: 33,
+    iceBlock: 34,
     breakable: 6,
     goal: 7,
     coin: 9,
@@ -17507,9 +17528,29 @@ class wl {
           m.y = ql(-0.17, 0.17, m.y * 0.82 + 0.075 * swimVertical + 0.00012 * a);
           os(k, p, m); p.o = !1;
         } else {
-          m.x = 0.1 * g; 0 > m.x && (p.j = !0); 0 < m.x && (p.j = !1);
-          m.y += 0.0008 * a; m.y = Math.min(m.y, 0.3);
-          f && p.o && !p.bc && (m.y = -0.26); os(k, p, m); p.o = !1;
+          // Standing on ice switches the character to momentum movement:
+          // input only accelerates, friction is nearly zero, so they keep
+          // sliding after releasing the keys and carry speed through jumps.
+          if (p.o) {
+            const kp = k.get(P).position, kr = k.get(R);
+            const feetB = kp.y + kr.offset.y + kr.size.y;
+            const feetL = kp.x + kr.offset.x, feetR = feetL + kr.size.x;
+            k.__ice = this.O.find(IceBlock, P, R).some(w => {
+              const ip = w.get(P).position, ir = w.get(R);
+              const iT = ip.y + ir.offset.y, iL = ip.x + ir.offset.x, iRt = iL + ir.size.x;
+              return Math.abs(iT - feetB) <= 0.6 && iRt > feetL + 1 && iL < feetR - 1;
+            });
+          }
+          if (k.__ice) {
+            m.x = ql(- 0.11, 0.11, m.x * Math.pow(0.999, a) + 0.0002 * g * a);
+            0 > m.x && (p.j = !0); 0 < m.x && (p.j = !1);
+            m.y += 0.0008 * a; m.y = Math.min(m.y, 0.3);
+            f && p.o && !p.bc && (m.y = -0.26); os(k, p, m); p.o = !1;
+          } else {
+            m.x = 0.1 * g; 0 > m.x && (p.j = !0); 0 < m.x && (p.j = !1);
+            m.y += 0.0008 * a; m.y = Math.min(m.y, 0.3);
+            f && p.o && !p.bc && (m.y = -0.26); os(k, p, m); p.o = !1;
+          }
         }
       }
       for (const p of this.O.find(Fj, P)) a = p.get(Fj),
@@ -18354,7 +18395,8 @@ class wl {
           'movingBlock',
           'oneWayBlock',
           'crumblingBlock',
-          'waterBlock'
+          'waterBlock',
+          'iceBlock'
         ],
         [
           'goal',
@@ -18417,7 +18459,7 @@ class wl {
                     @mouseout=
       ${ this.H }
                     title=
-      ${ 'movingBlock' === c ? 'Moving Block' : W(Pr[c]) || ('oneWayBlock' === c ? 'One-Way Platform' : 'crumblingBlock' === c ? 'Crumbling Block' : 'waterBlock' === c ? 'Water' : '') }
+      ${ 'movingBlock' === c ? 'Moving Block' : W(Pr[c]) || ('oneWayBlock' === c ? 'One-Way Platform' : 'crumblingBlock' === c ? 'Crumbling Block' : 'waterBlock' === c ? 'Water' : 'iceBlock' === c ? 'Ice' : '') }
                     ?pressed=
       ${ c === a.selected }
                     .value=
@@ -18570,7 +18612,7 @@ class wl {
       a.target instanceof mt && (this.tool = a.target.tool)
     }
     Ma(a) {
-      a.target instanceof mt && (this.hoveredToolText = (a = a.target.hoveredTool) && a in Pr ? (W(Pr[a]) || ('movingBlock' === a ? 'Moving Block' : 'oneWayBlock' === a ? 'One-Way Platform' : 'crumblingBlock' === a ? 'Crumbling Block' : 'waterBlock' === a ? 'Water' : '')) : '');
+      a.target instanceof mt && (this.hoveredToolText = (a = a.target.hoveredTool) && a in Pr ? (W(Pr[a]) || ('movingBlock' === a ? 'Moving Block' : 'oneWayBlock' === a ? 'One-Way Platform' : 'crumblingBlock' === a ? 'Crumbling Block' : 'waterBlock' === a ? 'Water' : 'iceBlock' === a ? 'Ice' : '')) : '');
       this.errorText = ''
     }
     Wa() {
