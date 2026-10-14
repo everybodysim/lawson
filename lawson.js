@@ -8996,6 +8996,20 @@ class wl {
     ctx.fillStyle = p[0]; ctx.fillRect(0, 0, 48, 3); ctx.fillRect(0, 45, 48, 3); ctx.fillRect(0, 0, 3, 48); ctx.fillRect(45, 0, 3, 48);
     ctx.restore();
   }
+  function drawIceGlint(ctx) {
+    // A hand-drawn 4-point sparkle: pale theme-accent rays, white-hot core.
+    ctx.save(); ctx.imageSmoothingEnabled = false;
+    ctx.clearRect(0, 0, 48, 48);
+    const palettes = THEME_COLORS;
+    const p = palettes[Qg] || palettes[1];
+    ctx.fillStyle = p[2];
+    ctx.fillRect(22, 6, 4, 36); ctx.fillRect(6, 22, 36, 4);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(20, 20, 8, 8);
+    ctx.fillRect(22, 16, 4, 4); ctx.fillRect(22, 28, 4, 4);
+    ctx.fillRect(16, 22, 4, 4); ctx.fillRect(28, 22, 4, 4);
+    ctx.restore();
+  }
   function drawOneWayBlock(ctx) {
     ctx.save(); ctx.imageSmoothingEnabled = false;
     const palettes = THEME_COLORS;
@@ -17523,12 +17537,9 @@ class wl {
       for (var k of this.O.find(N, P)) {
         var m = k.get(S).wa;
         const p = k.get(N);
-        let waterTop = -1;
         const water = this.O.find(WaterBlock, P, R).some(w => {
           const wp = w.get(P).position, wr = w.get(R), kp = k.get(P).position, kr = k.get(R);
-          const hit = kp.x + kr.offset.x < wp.x + wr.offset.x + wr.size.x && kp.x + kr.offset.x + kr.size.x > wp.x + wr.offset.x && kp.y + kr.offset.y < wp.y + wr.offset.y + wr.size.y && kp.y + kr.offset.y + kr.size.y > wp.y + wr.offset.y;
-          if (hit && (0 > waterTop || wp.y + wr.offset.y < waterTop)) waterTop = wp.y + wr.offset.y;
-          return hit;
+          return kp.x + kr.offset.x < wp.x + wr.offset.x + wr.size.x && kp.x + kr.offset.x + kr.size.x > wp.x + wr.offset.x && kp.y + kr.offset.y < wp.y + wr.offset.y + wr.size.y && kp.y + kr.offset.y + kr.size.y > wp.y + wr.offset.y;
         });
         // Landing dust: small puffs when a character touches down at speed.
         if (p.o && p.__lg !== !0 && !p.bc && !water && 0.05 < m.y) {
@@ -17538,14 +17549,6 @@ class wl {
           puff(this.O, G().Vc, lp.x + lr.offset.x + lr.size.x - 4, dustY, 0.02, -0.015, 12, 6, 300);
         }
         p.__lg = p.o === !0;
-        // Water splash: droplets when a character plunges into water.
-        if (water && p.__pw !== !0 && !p.bc && 0.03 < m.y && 0 <= waterTop) {
-          const sp = k.get(P).position;
-          puff(this.O, G().Vc, sp.x - 8, waterTop - 6, 0, -0.02, 16, 8, 250);
-          for (let i = 0; 4 > i; i++) puff(this.O, G().Wc, sp.x + (Math.random() - 0.5) * 10, waterTop - 4,
-            (Math.random() - 0.5) * 0.12, -0.12 - 0.1 * Math.random(), 3, 3, 400);
-        }
-        p.__pw = water === !0;
         // Coyote time: a jump still works for a short window after walking
         // off a ledge. Jump buffering: a press just before landing fires on
         // touchdown instead of being dropped.
@@ -17646,8 +17649,9 @@ class wl {
   };
   var shakeT = 0, shakeMag = 0;
   function addShake(mag, ms) { shakeMag = Math.max(shakeMag, mag); shakeT = Math.max(shakeT, ms); }
-  function puff(world, frames, px, py, vx, vy, w, h, life) {
-    const e = new x(new gj, new lj, new P(new C(px, py), 0, new C(O, O)), ...co(frames), new R(new C(w, h)), new S(new C(vx, vy)));
+  function puff(world, art, px, py, vx, vy, w, h, life) {
+    const comps = 'function' === typeof art ? [new D(new Na(art), 0)] : co(art);
+    const e = new x(new gj, new lj, new P(new C(px, py), 0, new C(O, O)), ...comps, new R(new C(w, h)), new S(new C(vx, vy)));
     e.get(D).__life = life;
     Ba(world, e);
   }
@@ -17657,7 +17661,7 @@ class wl {
       for (const w of this.O.find(IceBlock, P, R)) {
         if (Math.random() * 2200 > a) continue;
         const ip = w.get(P).position;
-        puff(this.O, G().Wc, ip.x + 2 + 12 * Math.random(), ip.y + 1, 0, -0.006, 3, 3, 420);
+        puff(this.O, drawIceGlint, ip.x + 2 + 12 * Math.random(), ip.y - 1, 0, -0.006, 4, 4, 420);
       }
       // Short-lived particles fade out and are removed.
       for (const e of this.O.find(D, P)) {
