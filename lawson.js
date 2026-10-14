@@ -8713,6 +8713,29 @@
           if (!blocked) rp.x = nx;
         }
       }
+      // Conveyors: a belt tile carries the player and pushable blocks whose
+      // feet rest on its top surface - nothing else, and only while
+      // literally touching the top of the belt.
+      const belts = this.O.find(ConveyorBlock, P, R);
+      if (belts.length) for (const belt of belts) {
+        const cb = belt.get(ConveyorBlock);
+        const bp = belt.get(P).position, bh = belt.get(R);
+        const bTop = bp.y + bh.offset.y;
+        const bL = bp.x + bh.offset.x, bR = bL + bh.size.x;
+        const carry = cb.dir * 0.05 * a;
+        for (const other of this.O.find(N, P, R)) {
+          const op = other.get(P).position, oh = other.get(R);
+          const oB = op.y + oh.offset.y + oh.size.y;
+          const oL = op.x + oh.offset.x, oR2 = oL + oh.size.x;
+          if (Math.abs(oB - bTop) <= 0.6 && oR2 > bL + 1 && oL < bR - 1) op.x += carry;
+        }
+        for (const other of this.O.find(hj, P, R)) {
+          const op = other.get(P).position, oh = other.get(R);
+          const oB = op.y + oh.offset.y + oh.size.y;
+          const oL = op.x + oh.offset.x, oR2 = oL + oh.size.x;
+          if (Math.abs(oB - bTop) <= 0.6 && oR2 > bL + 1 && oL < bR - 1) op.x += carry;
+        }
+      }
       const b = this.O.find(R);
       // Update crumbling blocks before normal character collision resolution.
       const crumbleSolids = this.O.find(R, P);
@@ -9036,6 +9059,36 @@ class wl {
   // Water is a seamless, animated volume: it has no solid collision surface.
   var WaterBlock = class extends u {};
   var IceBlock = class extends u {};
+  var ConveyorBlock = class extends u {
+    constructor(a = 1) { super(); this.dir = a }
+  };
+  function drawConveyorCore(ctx, entity, dir) {
+    ctx.save(); ctx.imageSmoothingEnabled = false;
+    const palettes = THEME_COLORS;
+    const p = palettes[Qg] || palettes[1];
+    // Machine body with a rolling belt across the top surface.
+    ctx.fillStyle = p[0]; ctx.fillRect(0, 0, 48, 48);
+    ctx.fillStyle = p[2]; ctx.fillRect(0, 0, 48, 4); ctx.fillRect(0, 44, 48, 4); ctx.fillRect(0, 0, 3, 48); ctx.fillRect(45, 0, 3, 48);
+    ctx.fillStyle = p[1]; ctx.fillRect(3, 4, 42, 16);
+    // Scrolling belt stripes, time-driven so the editor preview animates too.
+    const phase = (Date.now() * 0.02) % 12;
+    ctx.fillStyle = p[5];
+    for (let i = -12; i < 48; i += 12) {
+      const x = ((i + (0 > dir ? 12 - phase : phase)) % 48 + 48) % 48;
+      ctx.fillRect(x, 6, 4, 12);
+    }
+    // Direction arrows on the belt face plus bolts on the body.
+    ctx.fillStyle = p[2];
+    for (let x = 8; 40 > x; x += 16) {
+      if (0 < dir) { ctx.fillRect(x, 9, 8, 3); ctx.fillRect(x + 4, 6, 3, 9); }
+      else { ctx.fillRect(x, 9, 8, 3); ctx.fillRect(x + 1, 6, 3, 9); }
+    }
+    ctx.fillStyle = p[1]; ctx.fillRect(6, 26, 4, 4); ctx.fillRect(38, 26, 4, 4); ctx.fillRect(6, 38, 4, 4); ctx.fillRect(38, 38, 4, 4);
+    ctx.fillStyle = p[2]; ctx.fillRect(20, 28, 8, 3); ctx.fillRect(22, 36, 4, 3);
+    ctx.restore();
+  }
+  function drawConveyorLeft(ctx, entity) { drawConveyorCore(ctx, entity, -1) }
+  function drawConveyorRight(ctx, entity) { drawConveyorCore(ctx, entity, 1) }
   var _waterCacheT = -1, _waterCacheList = null;
   let _waterHalf = null;
   function drawWaterBlock(ctx, entity) {
@@ -9150,6 +9203,8 @@ class wl {
   var T = new Map;
   T.set(33, (a, b) => new x(new P(new C(a, b), 0, new C(O, O)), new D(new Na(drawWaterBlock), - 0.5), new R(new C(16, 16)), new WaterBlock));
   T.set(34, (a, b) => new x(new P(new C(a, b), 0, new C(O, O)), new D(new Na(drawIceBlock), 0), new R(new C(16, 16)), new IceBlock));
+  T.set(35, (a, b) => new x(new P(new C(a, b), 0, new C(O, O)), new D(new Na(drawConveyorLeft), 0), new R(new C(16, 16)), new ConveyorBlock(-1)));
+  T.set(36, (a, b) => new x(new P(new C(a, b), 0, new C(O, O)), new D(new Na(drawConveyorRight), 0), new R(new C(16, 16)), new ConveyorBlock(1)));
   T.set(30, (a, b) => new x(new P(new C(a, b), 0, new C(O, O)), new D(new Na(drawMovingBlock), 1), new R(new C(16, 16)), new MovingBlock(a, a - 48, a + 48)));
   T.set(31, (a, b) => new x(new P(new C(a, b), 0, new C(O, O)), new D(new Na(drawOneWayBlock), 0), new R(new C(16, 8)), new OneWayBlock));
   T.set(32, (a, b) => new x(new P(new C(a, b), 0, new C(O, O)), new D(new Na(drawCrumblingBlock), 0), new R(new C(16, 16)), new CrumblingBlock));
@@ -16163,6 +16218,8 @@ class wl {
     crumblingBlock: sf,
     waterBlock: sf,
     iceBlock: sf,
+    conveyorLeft: sf,
+    conveyorRight: sf,
     breakable: Ff,
     goal: uf,
     coin: lf,
@@ -16323,6 +16380,8 @@ class wl {
     },
     waterBlock: { N: [0, 1453, 1061, 20, 20], Aa: [0, 1453, 1084, 20, 20], active: [0, 945, 320, 20, 20] },
     iceBlock: { N: [0, 1453, 1061, 20, 20], Aa: [0, 1453, 1084, 20, 20], active: [0, 945, 320, 20, 20] },
+    conveyorLeft: { N: [0, 1453, 1061, 20, 20], Aa: [0, 1453, 1084, 20, 20], active: [0, 945, 320, 20, 20] },
+    conveyorRight: { N: [0, 1453, 1061, 20, 20], Aa: [0, 1453, 1084, 20, 20], active: [0, 945, 320, 20, 20] },
     // Every toolbox item must have idle/hover/active sprite frames; missing entries
     // throw during template rendering and prevent the entire toolbar from rendering.
     movingBlock: {
@@ -16998,7 +17057,9 @@ class wl {
       oneWayBlock: p => `<rect x="3" y="12" width="14" height="4" fill="${p.o}"/><rect x="4" y="13" width="12" height="2" fill="${p.m}"/><rect x="4" y="13" width="12" height="1" fill="${p.l}"/><rect x="9" y="4" width="2" height="1" fill="${p.m}"/><rect x="8" y="5" width="4" height="1" fill="${p.m}"/><rect x="7" y="6" width="6" height="1" fill="${p.m}"/><rect x="9" y="7" width="2" height="4" fill="${p.m}"/>`,
       crumblingBlock: p => `<rect x="4" y="4" width="12" height="11" fill="${p.o}"/><rect x="5" y="5" width="10" height="9" fill="${p.m}"/><rect x="5" y="5" width="10" height="1" fill="${p.l}"/><rect x="9" y="5" width="1" height="2" fill="${p.o}"/><rect x="10" y="7" width="1" height="2" fill="${p.o}"/><rect x="9" y="9" width="1" height="2" fill="${p.o}"/><rect x="10" y="11" width="1" height="3" fill="${p.o}"/><rect x="6" y="16" width="2" height="1" fill="${p.m}"/><rect x="12" y="16" width="2" height="1" fill="${p.m}"/><rect x="9" y="17" width="1" height="1" fill="${p.m}"/>`,
       waterBlock: p => `<rect x="3" y="4" width="14" height="13" fill="${p.o}"/><rect x="4" y="5" width="12" height="11" fill="${p.m}"/><rect x="4" y="5" width="12" height="1" fill="${p.l}"/><rect x="5" y="8" width="3" height="1" fill="${p.l}"/><rect x="10" y="7" width="3" height="1" fill="${p.l}"/><rect x="13" y="9" width="2" height="1" fill="${p.l}"/><rect x="6" y="11" width="3" height="1" fill="${p.l}"/><rect x="11" y="11" width="2" height="1" fill="${p.l}"/><rect x="7" y="14" width="2" height="1" fill="${p.l}"/><rect x="12" y="14" width="2" height="1" fill="${p.l}"/>`,
-      iceBlock: p => `<rect x="3" y="4" width="14" height="13" fill="${p.o}"/><rect x="4" y="5" width="12" height="11" fill="${p.m}"/><rect x="4" y="5" width="12" height="1" fill="${p.l}"/><rect x="5" y="7" width="4" height="1" fill="${p.l}"/><rect x="10" y="9" width="4" height="1" fill="${p.l}"/><rect x="6" y="11" width="4" height="1" fill="${p.l}"/><rect x="11" y="13" width="3" height="1" fill="${p.l}"/><rect x="4" y="14" width="12" height="2" fill="${p.o}"/>`
+      iceBlock: p => `<rect x="3" y="4" width="14" height="13" fill="${p.o}"/><rect x="4" y="5" width="12" height="11" fill="${p.m}"/><rect x="4" y="5" width="12" height="1" fill="${p.l}"/><rect x="5" y="7" width="4" height="1" fill="${p.l}"/><rect x="10" y="9" width="4" height="1" fill="${p.l}"/><rect x="6" y="11" width="4" height="1" fill="${p.l}"/><rect x="11" y="13" width="3" height="1" fill="${p.l}"/><rect x="4" y="14" width="12" height="2" fill="${p.o}"/>`,
+      conveyorLeft: p => `<rect x="3" y="6" width="14" height="8" fill="${p.o}"/><rect x="4" y="7" width="12" height="6" fill="${p.m}"/><rect x="2" y="9" width="5" height="3" fill="${p.l}"/><rect x="9" y="8" width="5" height="1" fill="${p.l}"/><rect x="3" y="16" width="14" height="2" fill="${p.o}"/><rect x="5" y="13" width="3" height="2" fill="${p.m}"/><rect x="12" y="13" width="3" height="2" fill="${p.m}"/>`,
+      conveyorRight: p => `<rect x="3" y="6" width="14" height="8" fill="${p.o}"/><rect x="4" y="7" width="12" height="6" fill="${p.m}"/><rect x="13" y="9" width="5" height="3" fill="${p.l}"/><rect x="6" y="8" width="5" height="1" fill="${p.l}"/><rect x="3" y="16" width="14" height="2" fill="${p.o}"/><rect x="5" y="13" width="3" height="2" fill="${p.m}"/><rect x="12" y="13" width="3" height="2" fill="${p.m}"/>`
     }[tool];
     if (!art) return '';
     return `url("data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" shape-rendering="crispEdges">${frame}${art(p)}</svg>`)}") center / contain no-repeat`;
@@ -17015,6 +17076,8 @@ class wl {
     crumblingBlock: 32,
     waterBlock: 33,
     iceBlock: 34,
+    conveyorLeft: 35,
+    conveyorRight: 36,
     breakable: 6,
     goal: 7,
     coin: 9,
@@ -17057,6 +17120,8 @@ class wl {
     crumblingBlock: 'tool_crumbling_block',
     waterBlock: 'tool_water_block',
     iceBlock: 'tool_ice_block',
+    conveyorLeft: 'tool_conveyor_left',
+    conveyorRight: 'tool_conveyor_right',
     breakable: 'tool_breakable',
     goal: 'tool_goal',
     coin: 'tool_coin',
@@ -17108,7 +17173,7 @@ class wl {
   };
   function Rr(a) {
     const tool = a.j.oa.tool;
-    const customDraw = { movingBlock: drawMovingBlock, oneWayBlock: drawOneWayBlock, crumblingBlock: drawCrumblingBlock, waterBlock: drawWaterBlock }[tool];
+    const customDraw = { movingBlock: drawMovingBlock, oneWayBlock: drawOneWayBlock, crumblingBlock: drawCrumblingBlock, waterBlock: drawWaterBlock, iceBlock: drawIceBlock, conveyorLeft: drawConveyorLeft, conveyorRight: drawConveyorRight }[tool];
     a.v.get(D).Xa = customDraw ? new Na(customDraw) : Ta(Mr[tool])
   }
   function Sr(a, b) {
@@ -18533,7 +18598,9 @@ class wl {
           'oneWayBlock',
           'crumblingBlock',
           'waterBlock',
-          'iceBlock'
+          'iceBlock',
+          'conveyorLeft',
+          'conveyorRight'
         ],
         [
           'goal',
@@ -18596,7 +18663,7 @@ class wl {
                     @mouseout=
       ${ this.H }
                     title=
-      ${ 'movingBlock' === c ? 'Moving Block' : W(Pr[c]) || ('oneWayBlock' === c ? 'One-Way Platform' : 'crumblingBlock' === c ? 'Crumbling Block' : 'waterBlock' === c ? 'Water' : 'iceBlock' === c ? 'Ice' : '') }
+      ${ 'movingBlock' === c ? 'Moving Block' : W(Pr[c]) || ('oneWayBlock' === c ? 'One-Way Platform' : 'crumblingBlock' === c ? 'Crumbling Block' : 'waterBlock' === c ? 'Water' : 'iceBlock' === c ? 'Ice' : 'conveyorLeft' === c ? 'Conveyor Left' : 'conveyorRight' === c ? 'Conveyor Right' : '') }
                     ?pressed=
       ${ c === a.selected }
                     .value=
@@ -18749,7 +18816,7 @@ class wl {
       a.target instanceof mt && (this.tool = a.target.tool)
     }
     Ma(a) {
-      a.target instanceof mt && (this.hoveredToolText = (a = a.target.hoveredTool) && a in Pr ? (W(Pr[a]) || ('movingBlock' === a ? 'Moving Block' : 'oneWayBlock' === a ? 'One-Way Platform' : 'crumblingBlock' === a ? 'Crumbling Block' : 'waterBlock' === a ? 'Water' : 'iceBlock' === a ? 'Ice' : '')) : '');
+      a.target instanceof mt && (this.hoveredToolText = (a = a.target.hoveredTool) && a in Pr ? (W(Pr[a]) || ('movingBlock' === a ? 'Moving Block' : 'oneWayBlock' === a ? 'One-Way Platform' : 'crumblingBlock' === a ? 'Crumbling Block' : 'waterBlock' === a ? 'Water' : 'iceBlock' === a ? 'Ice' : 'conveyorLeft' === a ? 'Conveyor Left' : 'conveyorRight' === a ? 'Conveyor Right' : '')) : '');
       this.errorText = ''
     }
     Wa() {
