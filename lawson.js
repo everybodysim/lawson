@@ -8996,21 +8996,6 @@ class wl {
   };
   // Draw at the same 48x48 source-pixel scale as the original Doodle tiles.
   // The game's world transform scales these 48 source pixels to one 16-unit tile.
-  function drawMovingBlock(ctx) {
-    ctx.save();
-    ctx.imageSmoothingEnabled = false;
-    const palettes = THEME_COLORS;
-    const palette = palettes[Qg] || palettes[1];
-    ctx.fillStyle = palette[0]; ctx.fillRect(0, 0, 48, 48);
-    ctx.fillStyle = palette[1]; ctx.fillRect(3, 3, 42, 9);
-    ctx.fillStyle = palette[2]; ctx.fillRect(6, 12, 36, 6);
-    ctx.fillStyle = palette[3]; ctx.fillRect(3, 18, 42, 21);
-    ctx.fillStyle = palette[4];
-    ctx.fillRect(9, 21, 9, 6); ctx.fillRect(30, 21, 9, 6);
-    ctx.fillStyle = palette[5]; ctx.fillRect(0, 39, 48, 9);
-    ctx.fillStyle = palette[4]; ctx.fillRect(6, 42, 9, 3); ctx.fillRect(33, 42, 9, 3);
-    ctx.restore();
-  }
   // One-way platforms collide only when approached from above.
   var OneWayBlock = class extends u {};
   // Crumbling platforms begin falling 1 second after a character stands on them.
@@ -9020,29 +9005,142 @@ class wl {
   // Crumbling blocks destroyed by falling out of the world come back after 5
   // seconds, fading in, and only once nobody is standing over their spot.
   var crumbleRespawns = [];
+  // Water is a seamless, animated volume: it has no solid collision surface.
+  var WaterBlock = class extends u {};
+  var IceBlock = class extends u {};
+  var ConveyorBlock = class extends u {
+    constructor(a = 1) { super(); this.dir = a }
+  };
+
+  // ---------------------------------------------------------------------
+  // Themed block painter. Every theme draws its solid tile in a different
+  // pixel style, so the custom blocks are built per theme from the REAL
+  // tile colors and resolution instead of one shared recolored template:
+  //   1 default  flat 8-bit: one flat fill, hard outline, no shading
+  //   2 16-bit   16x16 grid, light top/left bevel, dark bottom/right bevel
+  //   3 garden   hi-res leafy clusters with flower dots (butterflies)
+  //   4 icecream cream frosting over sponge (hi-res)
+  //   5 spooky   16x16 grid, white brick lines on dark gray
+  // `kind` shapes the block (solid slab, half slab, cracked, etc.).
+  // ---------------------------------------------------------------------
+  var THEME_ART = {
+    // default 8-bit: solid #00d257 world, props in orange/black/white
+    1: { fill: '#00d257', dark: '#00913d', light: '#74ea6a', line: '#000000', accent: '#fe933e', glint: '#ffffff', grid: 3, ice: '#4cfeff' },
+    // 16-bit: chocolate-orange bevel tile
+    2: { fill: '#ffad53', dark: '#e98520', light: '#fec98e', line: '#56402b', accent: '#e06529', glint: '#ffffff', grid: 3, ice: '#a7dcff' },
+    // garden / butterflies: hedge greens with flower dots
+    3: { fill: '#74d2a8', dark: '#5eaea0', light: '#86f88c', line: '#3d7f78', accent: '#da916d', glint: '#fffdb3', grid: 1, ice: '#cbfea1' },
+    // ice cream: sponge + cream frosting
+    4: { fill: '#fcc099', dark: '#fdcfa7', light: '#fffdf0', line: '#c98d60', accent: '#fb89fa', glint: '#ffffff', grid: 1, ice: '#c1e7ff' },
+    // spooky: dark gray body, white brick lines
+    5: { fill: '#4c4c4c', dark: '#2b2b2b', light: '#ffffff', line: '#ffffff', accent: '#ff5ce1', glint: '#ffffff', grid: 3, ice: '#4cfeff' }
+  };
+  function themeArt() { return THEME_ART[Qg] || THEME_ART[1]; }
+  // Deterministic scatter so a texture looks hand-placed but never shimmers.
+  function artHash(x, y, salt) {
+    let h = (x * 374761393 + y * 668265263 + salt * 2147483647) >>> 0;
+    h = ((h ^ (h >>> 13)) * 1274126177) >>> 0;
+    return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+  }
+  // Paint a base slab of the given pixel rect in the current theme's solid style.
+  function paintSolid(ctx, x0, y0, w, h, t) {
+    const g = t.grid;           // source pixels per art pixel (3 = chunky, 1 = fine)
+    if (Qg === 2) {
+      // 16-bit bevel: dark bottom/right, light top/left, flat middle.
+      ctx.fillStyle = t.fill; ctx.fillRect(x0, y0, w, h);
+      ctx.fillStyle = t.light; ctx.fillRect(x0, y0, w, g); ctx.fillRect(x0, y0, g, h);
+      ctx.fillStyle = t.dark; ctx.fillRect(x0, y0 + h - g, w, g); ctx.fillRect(x0 + w - g, y0, g, h);
+      // recessed inner panel
+      ctx.fillStyle = t.light; ctx.fillRect(x0 + g * 2, y0 + g * 2, w - g * 4, g);
+      ctx.fillStyle = t.dark; ctx.fillRect(x0 + g * 2, y0 + h - g * 3, w - g * 4, g);
+    } else if (Qg === 4) {
+      // ice cream: sponge dither with a cream top.
+      for (let yy = 0; yy < h; yy++) for (let xx = 0; xx < w; xx++) {
+        ctx.fillStyle = (xx + yy) % 2 ? t.fill : t.dark;
+        ctx.fillRect(x0 + xx, y0 + yy, 1, 1);
+      }
+      ctx.fillStyle = t.light; ctx.fillRect(x0, y0, w, Math.min(h, 7));
+      for (let xx = 0; xx < w; xx++) {
+        const d = 7 + Math.floor(artHash(xx, y0, 3) * 4);
+        ctx.fillRect(x0 + xx, y0 + 7, 1, Math.max(0, Math.min(d - 7, h - 7)));
+      }
+    } else if (Qg === 3) {
+      // garden: leafy clusters with the odd flower.
+      ctx.fillStyle = t.fill; ctx.fillRect(x0, y0, w, h);
+      for (let yy = 0; yy < h; yy += 3) for (let xx = 0; xx < w; xx += 3) {
+        const r = artHash(xx + x0, yy + y0, 5);
+        if (r < 0.3) { ctx.fillStyle = t.dark; ctx.fillRect(x0 + xx, y0 + yy, 3, 3); }
+        else if (r < 0.55) { ctx.fillStyle = t.light; ctx.fillRect(x0 + xx, y0 + yy, 3, 3); }
+      }
+      for (let yy = 6; yy < h - 6; yy += 15) for (let xx = 6; xx < w - 6; xx += 15) {
+        if (artHash(xx + x0, yy + y0, 9) < 0.55) {
+          ctx.fillStyle = t.accent; ctx.fillRect(x0 + xx, y0 + yy, 6, 6);
+          ctx.fillStyle = t.glint; ctx.fillRect(x0 + xx + 2, y0 + yy + 2, 2, 2);
+        }
+      }
+    } else if (Qg === 5) {
+      // spooky: dark body, white brick lines on a 16x16 grid.
+      ctx.fillStyle = t.fill; ctx.fillRect(x0, y0, w, h);
+      ctx.fillStyle = t.line;
+      // Bricks are 24 wide x 12 tall with 3px mortar, like the real tile, but
+      // only every other course is drawn so the body stays dark and readable.
+      for (let by = 0; by < h; by += 24) {
+        ctx.fillRect(x0, y0 + by, w, 3);
+        const off = (by / 24) % 2 ? 12 : 0;
+        for (let bx = off; bx < w; bx += 24) ctx.fillRect(x0 + bx, y0 + by, 3, Math.min(12, h - by));
+      }
+    } else {
+      // default 8-bit: flat fill with a hard 3px outline and nothing else.
+      ctx.fillStyle = t.fill; ctx.fillRect(x0, y0, w, h);
+    }
+  }
+  // Hard outline used by themes whose own tiles are outlined.
+  function paintEdge(ctx, w, h, t) {
+    if (Qg === 1) { ctx.fillStyle = t.dark; ctx.fillRect(0, h - 3, w, 3); ctx.fillRect(w - 3, 0, 3, h); }
+    else if (Qg === 5) { ctx.fillStyle = t.line; ctx.fillRect(0, 0, w, 3); ctx.fillRect(0, h - 3, w, 3); ctx.fillRect(0, 0, 3, h); ctx.fillRect(w - 3, 0, 3, h); }
+  }
+  function drawMovingBlock(ctx) {
+    ctx.save(); ctx.imageSmoothingEnabled = false;
+    const t = themeArt();
+    paintSolid(ctx, 0, 0, 48, 48, t);
+    paintEdge(ctx, 48, 48, t);
+    // Two side arrows on a darker center rail say "this slides".
+    ctx.fillStyle = Qg === 5 ? t.accent : t.line;
+    ctx.fillRect(9, 21, 30, 6);
+    ctx.fillStyle = t.glint;
+    ctx.fillRect(9, 21, 6, 6); ctx.fillRect(33, 21, 6, 6);
+    ctx.fillStyle = Qg === 5 ? t.glint : t.accent;
+    ctx.fillRect(18, 18, 3, 12); ctx.fillRect(27, 18, 3, 12);
+    ctx.restore();
+  }
   function drawIceBlock(ctx) {
     ctx.save(); ctx.imageSmoothingEnabled = false;
-    const palettes = THEME_COLORS;
-    const p = palettes[Qg] || palettes[1];
-    // Frosted slab: solid base, pale top band, diagonal sheen and sparkle chips.
-    ctx.fillStyle = p[0]; ctx.fillRect(0, 0, 48, 48);
-    ctx.fillStyle = p[1]; ctx.fillRect(3, 3, 42, 42);
-    ctx.fillStyle = p[2]; ctx.fillRect(3, 36, 42, 9);
-    ctx.fillStyle = p[5]; ctx.fillRect(6, 6, 12, 3); ctx.fillRect(8, 11, 6, 3);
-    ctx.fillStyle = p[2]; ctx.fillRect(30, 9, 9, 3); ctx.fillRect(34, 14, 6, 3);
-    ctx.fillStyle = p[5]; ctx.fillRect(24, 20, 15, 3); ctx.fillRect(28, 25, 11, 3);
-    ctx.fillStyle = p[2]; ctx.fillRect(6, 26, 8, 3);
-    ctx.fillStyle = p[0]; ctx.fillRect(0, 0, 48, 3); ctx.fillRect(0, 45, 48, 3); ctx.fillRect(0, 0, 3, 48); ctx.fillRect(45, 0, 3, 48);
+    const t = themeArt();
+    // Themed frame first (so ice matches the world's own blocks), then a
+    // glassy core inset inside it.
+    paintSolid(ctx, 0, 0, 48, 48, t);
+    paintEdge(ctx, 48, 48, t);
+    const m = 6;                       // frame thickness
+    ctx.fillStyle = t.ice; ctx.fillRect(m, m, 48 - 2 * m, 48 - 2 * m);
+    // Inner shade along the bottom/right for depth, highlight along top/left.
+    ctx.fillStyle = t.dark; ctx.globalAlpha = 0.35;
+    ctx.fillRect(m, 48 - m - 6, 48 - 2 * m, 6); ctx.fillRect(48 - m - 6, m, 6, 48 - 2 * m);
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = '#ffffff'; ctx.globalAlpha = 0.7;
+    ctx.fillRect(m, m, 48 - 2 * m, 3); ctx.fillRect(m, m, 3, 48 - 2 * m);
+    ctx.globalAlpha = 1;
+    // Diagonal glassy streaks.
+    ctx.fillStyle = '#ffffff';
+    for (let i = 0; i < 3; i++) ctx.fillRect(12 + i * 3, 33 - i * 9, 12 - i * 3, 3);
+    ctx.fillRect(27, 12, 9, 3); ctx.fillRect(30, 18, 6, 3);
     ctx.restore();
   }
   function drawIceGlint(ctx) {
-    // A hand-drawn 4-point sparkle: light theme-accent rays, white-hot core.
-    // Na draw space is 3:1 against world units, so this 14-unit star renders
-    // about 4.7px wide - a small twinkle, not a block-sized decal.
+    // Compact 4-point sparkle. Na draw space is 3:1 against world units, so
+    // this 14-unit star renders about 4.7px wide.
     ctx.save(); ctx.imageSmoothingEnabled = false;
-    const palettes = THEME_COLORS;
-    const p = palettes[Qg] || palettes[1];
-    ctx.fillStyle = p[2];
+    const t = themeArt();
+    ctx.fillStyle = t.ice;
     ctx.fillRect(23, 17, 2, 14); ctx.fillRect(17, 23, 14, 2);
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(22, 22, 4, 4);
@@ -9052,55 +9150,51 @@ class wl {
   }
   function drawOneWayBlock(ctx) {
     ctx.save(); ctx.imageSmoothingEnabled = false;
-    const palettes = THEME_COLORS;
-    const p=palettes[Qg]||palettes[1];
-    ctx.fillStyle=p[0];ctx.fillRect(0,0,48,24);
-    ctx.fillStyle=p[1];ctx.fillRect(3,3,42,6);
-    ctx.fillStyle=p[2];ctx.fillRect(6,9,36,3);
-    ctx.fillStyle=p[5];ctx.fillRect(0,18,48,6);
-    ctx.fillStyle=p[2];ctx.fillRect(6,21,9,3);ctx.fillRect(33,21,9,3);
+    const t = themeArt();
+    // Thin 24-tall ledge: only the top half of a tile.
+    paintSolid(ctx, 0, 0, 48, 24, t);
+    paintEdge(ctx, 48, 24, t);
+    // Little pass-through notches along the underside.
+    ctx.fillStyle = Qg === 5 ? t.accent : t.dark;
+    ctx.fillRect(6, 18, 9, 6); ctx.fillRect(33, 18, 9, 6);
+    ctx.fillStyle = t.glint; ctx.fillRect(6, 18, 9, 3); ctx.fillRect(33, 18, 9, 3);
     ctx.restore();
   }
   function drawCrumblingBlock(ctx) {
     ctx.save(); ctx.imageSmoothingEnabled = false;
-    const palettes = THEME_COLORS;
-    const p=palettes[Qg]||palettes[1];
-    ctx.fillStyle=p[0];ctx.fillRect(0,0,48,48);
-    ctx.fillStyle=p[1];ctx.fillRect(3,3,42,9);ctx.fillRect(3,15,18,9);ctx.fillRect(27,15,18,9);
-    ctx.fillStyle=p[2];ctx.fillRect(6,6,36,3);ctx.fillRect(6,18,12,3);ctx.fillRect(30,18,12,3);
-    ctx.fillStyle=p[5];ctx.fillRect(21,12,6,15);ctx.fillRect(12,27,6,9);ctx.fillRect(30,30,6,9);
-    ctx.fillStyle=p[2];ctx.fillRect(9,39,9,3);ctx.fillRect(30,42,9,3);
+    const t = themeArt();
+    paintSolid(ctx, 0, 0, 48, 48, t);
+    paintEdge(ctx, 48, 48, t);
+    // Jagged crack from the top, splitting into two branches, plus loose chips.
+    ctx.fillStyle = Qg === 5 ? t.accent : (Qg === 1 ? t.line : t.line);
+    ctx.fillRect(21, 0, 6, 9); ctx.fillRect(24, 9, 6, 9); ctx.fillRect(18, 18, 6, 9);
+    ctx.fillRect(24, 18, 6, 6); ctx.fillRect(27, 24, 6, 9); ctx.fillRect(15, 27, 6, 6);
+    ctx.fillStyle = t.fill; ctx.fillRect(6, 39, 6, 6); ctx.fillRect(36, 42, 6, 6);
+    ctx.fillStyle = t.dark; ctx.fillRect(6, 42, 6, 3); ctx.fillRect(36, 45, 6, 3);
     ctx.restore();
   }
-  // Water is a seamless, animated volume: it has no solid collision surface.
-  var WaterBlock = class extends u {};
-  var IceBlock = class extends u {};
-  var ConveyorBlock = class extends u {
-    constructor(a = 1) { super(); this.dir = a }
-  };
   function drawConveyorCore(ctx, entity, dir) {
     ctx.save(); ctx.imageSmoothingEnabled = false;
-    const palettes = THEME_COLORS;
-    const p = palettes[Qg] || palettes[1];
-    // Machine body with a rolling belt across the top surface.
-    ctx.fillStyle = p[0]; ctx.fillRect(0, 0, 48, 48);
-    ctx.fillStyle = p[2]; ctx.fillRect(0, 0, 48, 4); ctx.fillRect(0, 44, 48, 4); ctx.fillRect(0, 0, 3, 48); ctx.fillRect(45, 0, 3, 48);
-    ctx.fillStyle = p[1]; ctx.fillRect(3, 4, 42, 16);
-    // Scrolling belt stripes, time-driven so the editor preview animates too.
+    const t = themeArt();
+    paintSolid(ctx, 0, 0, 48, 48, t);
+    paintEdge(ctx, 48, 48, t);
+    // Belt band across the top 18px with time-driven scrolling chevrons so
+    // the editor preview animates too.
+    ctx.fillStyle = Qg === 5 ? t.dark : (Qg === 1 ? t.dark : t.line);
+    ctx.fillRect(0, 3, 48, 18);
     const phase = (Date.now() * 0.02) % 12;
-    ctx.fillStyle = p[5];
+    ctx.fillStyle = Qg === 5 ? t.accent : t.accent;
     for (let i = -12; i < 48; i += 12) {
-      const x = ((i + (0 > dir ? 12 - phase : phase)) % 48 + 48) % 48;
-      ctx.fillRect(x, 6, 4, 12);
+      const xx = ((i + (0 > dir ? 12 - phase : phase)) % 48 + 48) % 48;
+      if (0 < dir) { ctx.fillRect(xx, 6, 3, 12); ctx.fillRect(xx + 3, 9, 3, 6); }
+      else { ctx.fillRect(xx + 3, 6, 3, 12); ctx.fillRect(xx, 9, 3, 6); }
     }
-    // Direction arrows on the belt face plus bolts on the body.
-    ctx.fillStyle = p[2];
-    for (let x = 8; 40 > x; x += 16) {
-      if (0 < dir) { ctx.fillRect(x, 9, 8, 3); ctx.fillRect(x + 4, 6, 3, 9); }
-      else { ctx.fillRect(x, 9, 8, 3); ctx.fillRect(x + 1, 6, 3, 9); }
-    }
-    ctx.fillStyle = p[1]; ctx.fillRect(6, 26, 4, 4); ctx.fillRect(38, 26, 4, 4); ctx.fillRect(6, 38, 4, 4); ctx.fillRect(38, 38, 4, 4);
-    ctx.fillStyle = p[2]; ctx.fillRect(20, 28, 8, 3); ctx.fillRect(22, 36, 4, 3);
+    // Rollers at each end.
+    ctx.fillStyle = t.glint; ctx.fillRect(3, 6, 3, 12); ctx.fillRect(42, 6, 3, 12);
+    // Bolts on the lower body.
+    ctx.fillStyle = t.glint;
+    ctx.fillRect(9, 33, 6, 6); ctx.fillRect(33, 33, 6, 6);
+    ctx.fillStyle = t.dark; ctx.fillRect(11, 35, 2, 2); ctx.fillRect(35, 35, 2, 2);
     ctx.restore();
   }
   function drawConveyorLeft(ctx, entity) { drawConveyorCore(ctx, entity, -1) }
