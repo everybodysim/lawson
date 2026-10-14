@@ -8805,7 +8805,7 @@
           if (Math.abs(bottom - myTop) <= 0.6 && or > myLeft + 1 && ol < myRight - 1) { stoodOn = true; break; }
         }
         if (stoodOn) block.stoodFor += a; else block.stoodFor = 0;
-        if (block.stoodFor >= 1000) { block.falling = true; block.fallSpeed = 0.04; }
+        if (block.stoodFor >= 1000) { block.falling = true; block.fallSpeed = 0.04; addShake(2, 160); }
       }
       for (var c of b) c.oe = c.get(P).position,
       c.le = c.get(R);
@@ -17388,7 +17388,7 @@ class wl {
       this.o = Pn();
       this.j = new C(0, 0)
     }
-    H() {
+    H(a) {
       var a = Ea(this.O.find(Ia));
       const b = a.get(P).position;
       a = a.get(P).scale;
@@ -17406,6 +17406,13 @@ class wl {
       c && !c.get(Jj).Gf && (d = 0.2);
       b.x = Math.floor(b.x + (this.j.x * a.x - b.x) * d);
       b.y = Math.floor(b.y + (this.j.y * a.y - b.y) * d);
+      // Subtle screen shake (crumbling blocks giving way).
+      if (0 < shakeT) {
+        shakeT = Math.max(0, shakeT - (isFinite(a) ? a : 16.6667));
+        const q = shakeMag * Math.min(1, shakeT / 160);
+        b.x += Math.round((Math.random() - 0.5) * 2 * q);
+        b.y += Math.round((Math.random() - 0.5) * 2 * q);
+      } else shakeMag = 0;
       c && (c.get(Jj).Gf = !1)
     }
   },
@@ -17516,10 +17523,39 @@ class wl {
       for (var k of this.O.find(N, P)) {
         var m = k.get(S).wa;
         const p = k.get(N);
+        let waterTop = -1;
         const water = this.O.find(WaterBlock, P, R).some(w => {
           const wp = w.get(P).position, wr = w.get(R), kp = k.get(P).position, kr = k.get(R);
-          return kp.x + kr.offset.x < wp.x + wr.offset.x + wr.size.x && kp.x + kr.offset.x + kr.size.x > wp.x + wr.offset.x && kp.y + kr.offset.y < wp.y + wr.offset.y + wr.size.y && kp.y + kr.offset.y + kr.size.y > wp.y + wr.offset.y;
+          const hit = kp.x + kr.offset.x < wp.x + wr.offset.x + wr.size.x && kp.x + kr.offset.x + kr.size.x > wp.x + wr.offset.x && kp.y + kr.offset.y < wp.y + wr.offset.y + wr.size.y && kp.y + kr.offset.y + kr.size.y > wp.y + wr.offset.y;
+          if (hit && (0 > waterTop || wp.y + wr.offset.y < waterTop)) waterTop = wp.y + wr.offset.y;
+          return hit;
         });
+        // Landing dust: small puffs when a character touches down at speed.
+        if (p.o && p.__lg !== !0 && !p.bc && !water && 0.05 < m.y) {
+          const lp = k.get(P).position, lr = k.get(R);
+          const dustY = lp.y + lr.offset.y + lr.size.y - 8;
+          puff(this.O, G().Vc, lp.x + lr.offset.x - 8, dustY, -0.02, -0.015, 12, 6, 300);
+          puff(this.O, G().Vc, lp.x + lr.offset.x + lr.size.x - 4, dustY, 0.02, -0.015, 12, 6, 300);
+        }
+        p.__lg = p.o === !0;
+        // Water splash: droplets when a character plunges into water.
+        if (water && p.__pw !== !0 && !p.bc && 0.03 < m.y && 0 <= waterTop) {
+          const sp = k.get(P).position;
+          puff(this.O, G().Vc, sp.x - 8, waterTop - 6, 0, -0.02, 16, 8, 250);
+          for (let i = 0; 4 > i; i++) puff(this.O, G().Wc, sp.x + (Math.random() - 0.5) * 10, waterTop - 4,
+            (Math.random() - 0.5) * 0.12, -0.12 - 0.1 * Math.random(), 3, 3, 400);
+        }
+        p.__pw = water === !0;
+        // Coyote time: a jump still works for a short window after walking
+        // off a ledge. Jump buffering: a press just before landing fires on
+        // touchdown instead of being dropped.
+        if (p.o) p.__coy = 0;
+        else if (!water) p.__coy = (p.__coy || 0) + a;
+        else p.__coy = 1e3;
+        if (f && p.__pj !== !0 && !p.o && !p.bc && !water) p.__jbuf = 120;
+        else p.__jbuf = Math.max(0, (p.__jbuf || 0) - a);
+        p.__pj = f === !0;
+        const wantsJump = (f && (p.o || (p.__coy || 0) <= 90)) || (p.o && 0 < (p.__jbuf || 0));
         if (p.bc) { m.x = 0; if (p.Te) { m.y += 0.0008 * a; m.y = Math.min(m.y, 0.3); os(k, p, m); } else m.y = 0; }
         else if (water) {
           // Water damps momentum, cancels most gravity, and lets up/down steer vertically.
@@ -17547,7 +17583,7 @@ class wl {
               const ip = w.get(P).position, ir = w.get(R);
               const iT = ip.y + ir.offset.y, iL = ip.x + ir.offset.x, iRt = iL + ir.size.x;
               if (Math.abs(iT - feetB) > 0.6) return false;
-              return wasSliding ? iRt > feetL + 1 && iL < feetR - 1
+              return wasSliding ? iRt > feetL && iL < feetR
                 : iRt > feetCenter && iL < feetCenter;
             });
           }
@@ -17555,13 +17591,13 @@ class wl {
             m.x = ql(- 0.11, 0.11, m.x * Math.pow(0.999, a) + 0.0002 * g * a);
             0 > m.x && (p.j = !0); 0 < m.x && (p.j = !1);
             m.y += 0.0008 * a; m.y = Math.min(m.y, 0.3);
-            f && p.o && !p.bc && (m.y = -0.26);
+            wantsJump && !p.bc && (m.y = -0.26, p.__jbuf = 0);
             // Gliding with no keys held shows the idle pose, not a run.
             os(k, p, 0 === g ? { x: 0, y: m.y } : m); p.o = !1;
           } else {
             m.x = 0.1 * g; 0 > m.x && (p.j = !0); 0 < m.x && (p.j = !1);
             m.y += 0.0008 * a; m.y = Math.min(m.y, 0.3);
-            f && p.o && !p.bc && (m.y = -0.26); os(k, p, m); p.o = !1;
+            wantsJump && !p.bc && (m.y = -0.26, p.__jbuf = 0); os(k, p, m); p.o = !1;
           }
         }
       }
@@ -17606,6 +17642,31 @@ class wl {
         ta(b, gl)
       }
       !c && Yi(J.kd) && (Ui(J.kd), Cj())
+    }
+  };
+  var shakeT = 0, shakeMag = 0;
+  function addShake(mag, ms) { shakeMag = Math.max(shakeMag, mag); shakeT = Math.max(shakeT, ms); }
+  function puff(world, frames, px, py, vx, vy, w, h, life) {
+    const e = new x(new gj, new lj, new P(new C(px, py), 0, new C(O, O)), ...co(frames), new R(new C(w, h)), new S(new C(vx, vy)));
+    e.get(D).__life = life;
+    Ba(world, e);
+  }
+  var psd = class extends Da {
+    H(a) {
+      // Ice sparkles: an occasional glint on top of each ice tile.
+      for (const w of this.O.find(IceBlock, P, R)) {
+        if (Math.random() * 2200 > a) continue;
+        const ip = w.get(P).position;
+        puff(this.O, G().Wc, ip.x + 2 + 12 * Math.random(), ip.y + 1, 0, -0.006, 3, 3, 420);
+      }
+      // Short-lived particles fade out and are removed.
+      for (const e of this.O.find(D, P)) {
+        const d = e.get(D);
+        if (void 0 === d.__life) continue;
+        d.__age = (d.__age || 0) + a;
+        if (d.__age >= d.__life) { z(this.O, e); continue; }
+        d.alpha = 1 - d.__age / d.__life;
+      }
     }
   };
   var ts = class extends Da {
@@ -18207,6 +18268,7 @@ class wl {
         new io(this.O, f),
         new ts(this.O, this),
         new bo(this.O),
+        new psd(this.O),
         new qs(this.O),
         new fo(this.O),
         new ss(this.O),
