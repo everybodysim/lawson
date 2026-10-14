@@ -8609,7 +8609,7 @@
           if (!oh) continue;
           const otherBottom = op.y + oh.offset.y + oh.size.y;
           const otherLeft = op.x + oh.offset.x, otherRight = otherLeft + oh.size.x;
-          if (other.Rc.has(mj)) continue; // falling blocks keep their grid slot, never ride
+          if (other.Rc.has(mj) || other.Rc.has(hj)) continue; // falling blocks and pushable boxes keep their grid slot, never ride
           if (Math.abs(otherBottom - top) <= 0.5 &&
               otherRight > platLeft + 3 && otherLeft < platRight - 3) riders.push(other);
         }
@@ -8717,23 +8717,39 @@
       // feet rest on its top surface - nothing else, and only while
       // literally touching the top of the belt.
       const belts = this.O.find(ConveyorBlock, P, R);
-      if (belts.length) for (const belt of belts) {
-        const cb = belt.get(ConveyorBlock);
-        const bp = belt.get(P).position, bh = belt.get(R);
-        const bTop = bp.y + bh.offset.y;
-        const bL = bp.x + bh.offset.x, bR = bL + bh.size.x;
-        const carry = cb.dir * 0.05 * a;
-        for (const other of this.O.find(N, P, R)) {
-          const op = other.get(P).position, oh = other.get(R);
-          const oB = op.y + oh.offset.y + oh.size.y;
-          const oL = op.x + oh.offset.x, oR2 = oL + oh.size.x;
-          if (Math.abs(oB - bTop) <= 0.6 && oR2 > bL + 1 && oL < bR - 1) op.x += carry;
-        }
-        for (const other of this.O.find(hj, P, R)) {
-          const op = other.get(P).position, oh = other.get(R);
-          const oB = op.y + oh.offset.y + oh.size.y;
-          const oL = op.x + oh.offset.x, oR2 = oL + oh.size.x;
-          if (Math.abs(oB - bTop) <= 0.6 && oR2 > bL + 1 && oL < bR - 1) op.x += carry;
+      if (belts.length) {
+        // Anything a belt can press something against: every solid body -
+        // walls, boxes, characters, other belts, platforms, closed blink
+        // gates. Only water (swimmable), one-ways (never block horizontally,
+        // like the character collision) and open blink gates are passed
+        // through, so moving things can never clip into each other.
+        const beltWalls = this.O.find(R, P).filter(w => !w.Rc.has(WaterBlock) && !w.Rc.has(OneWayBlock) && !(w.Rc.has(oj) && !0 === w.get(oj).Yc));
+        for (const belt of belts) {
+          const cb = belt.get(ConveyorBlock);
+          const bp = belt.get(P).position, bh = belt.get(R);
+          const bTop = bp.y + bh.offset.y;
+          const bL = bp.x + bh.offset.x, bR = bL + bh.size.x;
+          const carry = cb.dir * 0.05 * a;
+          const carried = this.O.find(N, P, R).concat(this.O.find(hj, P, R));
+          for (const other of carried) {
+            const op = other.get(P).position, oh = other.get(R);
+            const oT = op.y + oh.offset.y, oB = oT + oh.size.y;
+            const oL = op.x + oh.offset.x, oR2 = oL + oh.size.x;
+            if (Math.abs(oB - bTop) > 0.6 || oR2 <= bL + 1 || oL >= bR - 1) continue;
+            // Clamp the carry against walls so a belt can never shove the
+            // player or a box into solid geometry.
+            let dx = carry;
+            for (const wall of beltWalls) {
+              if (wall === other || wall === belt) continue;
+              const wp = wall.get(P).position, wh = wall.get(R);
+              const wT = wp.y + wh.offset.y, wB = wT + wh.size.y;
+              if (oB <= wT + 0.5 || oT >= wB - 0.5) continue;
+              const wL = wp.x + wh.offset.x, wR = wL + wh.size.x;
+              if (0 < dx && oR2 <= wL + 0.5) dx = Math.min(dx, wL - oR2);
+              else if (0 > dx && oL >= wR - 0.5) dx = Math.max(dx, wR - oL);
+            }
+            op.x += dx;
+          }
         }
       }
       const b = this.O.find(R);
