@@ -8805,7 +8805,7 @@
           if (Math.abs(bottom - myTop) <= 0.6 && or > myLeft + 1 && ol < myRight - 1) { stoodOn = true; break; }
         }
         if (stoodOn) block.stoodFor += a; else block.stoodFor = 0;
-        if (block.stoodFor >= 1000) { block.falling = true; block.fallSpeed = 0.04; addShake(2, 160); }
+        if (block.stoodFor >= 1000) { block.falling = true; block.fallSpeed = 0.04; addShake(2, 160); sfx('crumble'); }
       }
       for (var c of b) c.oe = c.get(P).position,
       c.le = c.get(R);
@@ -8997,17 +8997,18 @@ class wl {
     ctx.restore();
   }
   function drawIceGlint(ctx) {
-    // A hand-drawn 4-point sparkle: pale theme-accent rays, white-hot core.
+    // A hand-drawn 4-point sparkle: light theme-accent rays, white-hot core.
+    // Na draw space is 3:1 against world units, so this 14-unit star renders
+    // about 4.7px wide - a small twinkle, not a block-sized decal.
     ctx.save(); ctx.imageSmoothingEnabled = false;
-    ctx.clearRect(0, 0, 48, 48);
     const palettes = THEME_COLORS;
     const p = palettes[Qg] || palettes[1];
     ctx.fillStyle = p[2];
-    ctx.fillRect(22, 6, 4, 36); ctx.fillRect(6, 22, 36, 4);
+    ctx.fillRect(23, 17, 2, 14); ctx.fillRect(17, 23, 14, 2);
     ctx.fillStyle = '#ffffff';
-    ctx.fillRect(20, 20, 8, 8);
-    ctx.fillRect(22, 16, 4, 4); ctx.fillRect(22, 28, 4, 4);
-    ctx.fillRect(16, 22, 4, 4); ctx.fillRect(28, 22, 4, 4);
+    ctx.fillRect(22, 22, 4, 4);
+    ctx.fillRect(23, 19, 2, 2); ctx.fillRect(23, 27, 2, 2);
+    ctx.fillRect(19, 23, 2, 2); ctx.fillRect(27, 23, 2, 2);
     ctx.restore();
   }
   function drawOneWayBlock(ctx) {
@@ -12371,7 +12372,7 @@ class wl {
               e = Ga(a, e);
               e < g && (g = e, d = k)
             }
-            g > f.get(dj).Og ? (ta(f, Oa), f.get(D).Xa = Va(c.Ec.N), f.get(S).wa.x = 0, f.get(S).wa.y = 0) : (void 0 === w(f, Oa) && v(f, Ua(c.Ec.Ca)), d = d.get(P).position, ao.x = d.x, ao.y = d.y, ao.sub(a), a = Fa(ao, ao.length()), a.x *= 0.05, a.y *= 0.05, f.get(S).wa.x = ao.x, f.get(S).wa.y = ao.y)
+            g > f.get(dj).Og ? (ta(f, Oa), f.get(D).Xa = Va(c.Ec.N), f.get(S).wa.x = 0, f.get(S).wa.y = 0, sfx('death')) : (void 0 === w(f, Oa) && v(f, Ua(c.Ec.Ca)), d = d.get(P).position, ao.x = d.x, ao.y = d.y, ao.sub(a), a = Fa(ao, ao.length()), a.x *= 0.05, a.y *= 0.05, f.get(S).wa.x = ao.x, f.get(S).wa.y = ao.y)
           }
         }
       }
@@ -12440,6 +12441,7 @@ class wl {
   function go(a) {
     var b = a.find(oj);
     a = G();
+    sfx('tick');
     for (const c of b) b = c.get(oj),
     b.Yc = !b.Yc,
     c.get(D).Xa = Va(b.Yc ? a.blink.Xc : a.blink.Na)
@@ -12716,7 +12718,7 @@ class wl {
   function uo(a, b, c, d, e) {
     b = d.get(Kj);
     b.j = 0;
-    Yi(J.kd) || (Xi(J.kd, 0, !0), Dj());
+    Yi(J.kd) || (Xi(J.kd, 0, !0), Dj(), sfx('win'));
     b.Wb = !0;
     z(a, e);
     0 < kl(d).length || (a = G(), a = new x(Ua(a.Pc), new P, new D(Va(a.Pc), 2)), jl(d, a))
@@ -17547,8 +17549,11 @@ class wl {
           const dustY = lp.y + lr.offset.y + lr.size.y - 8;
           puff(this.O, G().Vc, lp.x + lr.offset.x - 8, dustY, -0.02, -0.015, 12, 6, 300);
           puff(this.O, G().Vc, lp.x + lr.offset.x + lr.size.x - 4, dustY, 0.02, -0.015, 12, 6, 300);
+          sfx('land', Math.min(1, m.y / 0.2));
         }
         p.__lg = p.o === !0;
+        if (water && p.__pw !== !0 && !p.bc && 0.03 < m.y) sfx('plunk');
+        p.__pw = water === !0;
         // Coyote time: a jump still works for a short window after walking
         // off a ledge. Jump buffering: a press just before landing fires on
         // touchdown instead of being dropped.
@@ -17594,13 +17599,13 @@ class wl {
             m.x = ql(- 0.11, 0.11, m.x * Math.pow(0.999, a) + 0.0002 * g * a);
             0 > m.x && (p.j = !0); 0 < m.x && (p.j = !1);
             m.y += 0.0008 * a; m.y = Math.min(m.y, 0.3);
-            wantsJump && !p.bc && (m.y = -0.26, p.__jbuf = 0);
+            wantsJump && !p.bc && (m.y = -0.26, p.__jbuf = 0, sfx('jump'));
             // Gliding with no keys held shows the idle pose, not a run.
             os(k, p, 0 === g ? { x: 0, y: m.y } : m); p.o = !1;
           } else {
             m.x = 0.1 * g; 0 > m.x && (p.j = !0); 0 < m.x && (p.j = !1);
             m.y += 0.0008 * a; m.y = Math.min(m.y, 0.3);
-            wantsJump && !p.bc && (m.y = -0.26, p.__jbuf = 0); os(k, p, m); p.o = !1;
+            wantsJump && !p.bc && (m.y = -0.26, p.__jbuf = 0, sfx('jump')); os(k, p, m); p.o = !1;
           }
         }
       }
@@ -17647,6 +17652,51 @@ class wl {
       !c && Yi(J.kd) && (Ui(J.kd), Cj())
     }
   };
+  var sfxCtx = null;
+  function sfxTone(f0, f1, dur, type, vol, when) {
+    const t = sfxCtx.currentTime + (when || 0);
+    const o = sfxCtx.createOscillator(), g = sfxCtx.createGain();
+    o.type = type;
+    o.frequency.setValueAtTime(f0, t);
+    o.frequency.exponentialRampToValueAtTime(Math.max(1, f1), t + dur);
+    g.gain.setValueAtTime(vol, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g).connect(sfxCtx.destination);
+    o.start(t); o.stop(t + dur + 0.02);
+  }
+  function sfxNoise(dur, vol, f, sweepTo) {
+    const t = sfxCtx.currentTime;
+    const len = Math.max(1, dur * sfxCtx.sampleRate | 0);
+    const buf = sfxCtx.createBuffer(1, len, sfxCtx.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = (2 * Math.random() - 1) * (1 - i / len);
+    const src = sfxCtx.createBufferSource(); src.buffer = buf;
+    const flt = sfxCtx.createBiquadFilter(); flt.type = 'lowpass';
+    flt.frequency.setValueAtTime(f, t);
+    sweepTo && flt.frequency.exponentialRampToValueAtTime(Math.max(40, sweepTo), t + dur);
+    const g = sfxCtx.createGain(); g.gain.value = vol;
+    src.connect(flt).connect(g).connect(sfxCtx.destination);
+    src.start(t);
+  }
+  function sfx(type, vol) {
+    try {
+      if (!sfxCtx) {
+        const AC = window.AudioContext || window.webkitAudioContext;
+        if (!AC) return;
+        sfxCtx = new AC();
+      }
+      'suspended' === sfxCtx.state && sfxCtx.resume();
+      const v = vol || 1;
+      if ('jump' === type) sfxTone(280, 520, 0.12, 'square', 0.04);
+      else if ('land' === type) { sfxNoise(0.07, 0.05 * v, 800); sfxTone(150, 95, 0.06, 'sine', 0.045 * v); }
+      else if ('tick' === type) sfxTone(1100, 850, 0.045, 'square', 0.05);
+      else if ('crumble' === type) sfxNoise(0.28, 0.09, 1300, 180);
+      else if ('plunk' === type) { sfxNoise(0.13, 0.04, 550, 140); sfxTone(260, 130, 0.1, 'sine', 0.04); }
+      else if ('death' === type) sfxTone(400, 110, 0.32, 'sawtooth', 0.05);
+      else if ('win' === type) { sfxTone(523, 523, 0.12, 'square', 0.055); sfxTone(659, 659, 0.12, 'square', 0.055, 0.12); sfxTone(784, 784, 0.22, 'square', 0.055, 0.24); }
+    } catch (e) {
+    }
+  }
   var shakeT = 0, shakeMag = 0;
   function addShake(mag, ms) { shakeMag = Math.max(shakeMag, mag); shakeT = Math.max(shakeT, ms); }
   function puff(world, art, px, py, vx, vy, w, h, life) {
@@ -18106,7 +18156,7 @@ class wl {
     a.oa.showKeyIcon = 0 < Ea(a.j.O.find(wj)).get(wj).Vb
   }
   function Vo(a, b) {
-    w(b, N) && (b.get(N).bc = !0);
+    w(b, N) && (b.get(N).bc = !0, sfx('death'));
     w(b, Fj) && (b.get(Fj).bc = !0);
     a.oa.od && w(b, Jj) && (Yi(J.Mc) || Xi(J.Mc), a.oa.od.errorText = W('try_again'), setTimeout(() =>{
       a.oa.od.errorText = ''
