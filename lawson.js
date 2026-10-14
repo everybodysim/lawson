@@ -8563,13 +8563,25 @@
     H(a) {
       const movingEntities = this.O.find(MovingBlock, P, R);
       const allSolid = this.O.find(R, P);
+      // Water tiles slow anything that travels through them.
+      const waterTiles = this.O.find(WaterBlock, P, R);
+      const overlapsWater = (px, pr, pt, pb) => {
+        for (const wt of waterTiles) {
+          const wp = wt.get(P).position, wh = wt.get(R);
+          const wL = wp.x + wh.offset.x, wR = wL + wh.size.x, wT = wp.y + wh.offset.y, wB = wT + wh.size.y;
+          if (pr > wL && px < wR && pb > wT && pt < wB) return !0;
+        }
+        return !1;
+      };
       // Platforms only stop against real solid geometry. Characters (S), water,
       // one-ways, pickups, triggers and currently-open blink gates are not walls.
       const isPlatformWall = other => {
         // Characters (player, enemies) are not walls: the platform shoves them.
-        // Every block type is a real wall to the platform: solids, water,
-        // one-ways, crumble, pushable, falling and closed blink gates.
+        // Water is pass-through: the platform slows down inside it but never
+        // bounces off it. Remaining blocks are real walls: solids, one-ways,
+        // crumble, pushable, falling and closed blink gates.
         if (other.Rc.has(S)) return other.Rc.has(hj) || other.Rc.has(mj);
+        if (other.Rc.has(WaterBlock)) return false;
         if (other.Rc.has(tj) || other.Rc.has(uj) || other.Rc.has(vj) || other.Rc.has(ej)) return false;
         if (other.Rc.has(jj) || other.Rc.has(nj) || other.Rc.has(rj) || other.Rc.has(sj)) return false;
         if (other.Rc.has(oj) && true === other.get(oj).Yc) return false;
@@ -8581,7 +8593,9 @@
         const platformPos = entity.get(P).position;
         const platformHit = entity.get(R);
         const startX = platformPos.x;
-        const frameDelta = Math.max(-2, Math.min(2, block.speed * block.direction * a));
+        // Platforms travel through water at reduced speed instead of bouncing off it.
+        const waterFactor = overlapsWater(platformPos.x + platformHit.offset.x, platformPos.x + platformHit.offset.x + platformHit.size.x, platformPos.y + platformHit.offset.y, platformPos.y + platformHit.offset.y + platformHit.size.y) ? 0.4 : 1;
+        const frameDelta = Math.max(-2, Math.min(2, block.speed * block.direction * a * waterFactor));
         if (!frameDelta) continue;
         const top = platformPos.y + platformHit.offset.y;
         const bottom = top + platformHit.size.y;
@@ -8655,6 +8669,27 @@
             allowedDelta = platformPos.x - startX;
           }
         }
+        // A platform overlapping a switch presses it, exactly like a character
+        // standing on it: blink blocks invert and falling blocks reverse. The
+        // io system releases the press automatically once the platform leaves.
+        {
+          const switches = this.O.find(nj, P, R);
+          if (switches.length) {
+            const plNow = platformPos.x + platformHit.offset.x, prNow = plNow + platformHit.size.x;
+            const ptNow = platformPos.y + platformHit.offset.y, pbNow = ptNow + platformHit.size.y;
+            for (const sw of switches) {
+              const sp = sw.get(P).position, sh = sw.get(R);
+              const sL = sp.x + sh.offset.x, sR = sL + sh.size.x, sT = sp.y + sh.offset.y, sB = sT + sh.size.y;
+              if (prNow > sL && plNow < sR && pbNow > sT && ptNow < sB) {
+                const sc = sw.get(nj);
+                if (!sc.j.includes(entity)) {
+                  sc.j.push(entity);
+                  if (!sc.o) { sc.o = !0; go(this.O, true); ho(this.O); v(sw, new D(Va(G().Ya.Kb))); }
+                }
+              }
+            }
+          }
+        }
         if (Math.abs(allowedDelta - frameDelta) > 0.001) block.direction *= -1;
         if (allowedDelta) for (const rider of riders) {
           const rp = rider.get(P).position, rh = rider.get(R);
@@ -8682,16 +8717,18 @@
         if (block.falling) {
           block.fallSpeed = Math.min(0.9, block.fallSpeed + 0.0012 * a);
           // Real falling collision: step down and stop on the first solid
-          // surface below (water and open blink gates are not surfaces).
-          let dy = block.fallSpeed * a, landed = false;
+          // surface below. Water is not a surface: the block sinks through it
+          // at reduced speed until it reaches the bottom or a real block.
+          const inWater = overlapsWater(myLeft, myRight, myTop, myBot);
+          let dy = block.fallSpeed * a * (inWater ? 0.35 : 1), landed = false;
           while (dy > 0 && !landed) {
             const step = Math.min(1, dy); dy -= step;
             // The box moves every step, so its top/bottom must be recomputed
             // each step or the landing check compares against stale bounds.
             const curTop = pos.y + hit.offset.y, curBot = curTop + hit.size.y;
             for (const other of crumbleSolids) {
-              // Water is a full block to other blocks: the crumble rests on it.
-              if (other === entity) continue;
+              // Water is pass-through: the crumble sinks through it.
+              if (other === entity || other.Rc.has(WaterBlock)) continue;
               if (other.Rc.has(oj) && true === other.get(oj).Yc) continue;
               const op = other.get(P).position, oh = other.get(R);
               const oTop = op.y + oh.offset.y, oBot = oTop + oh.size.y;
@@ -8712,7 +8749,7 @@
           // (e.g. a moving platform sliding out), it resumes falling.
           let supported = false;
           for (const other of crumbleSolids) {
-            if (other === entity) continue;
+            if (other === entity || other.Rc.has(WaterBlock)) continue;
             if (other.Rc.has(oj) && true === other.get(oj).Yc) continue;
             const op = other.get(P).position, oh = other.get(R);
             const oTop = op.y + oh.offset.y, oBot = oTop + oh.size.y;
@@ -8744,12 +8781,12 @@
         for (const q of b) xl(this.j, q.oe, q.le) && m.push(q);
         0 < c.o && (c.wa.x -= c.wa.x * c.o * a, c.wa.y -= c.wa.y * c.o * a);
         c.j.x += c.wa.x * a;
-        c.j.y += c.wa.y * a;
+        c.j.y += c.wa.y * a * (g.Rc.has(mj) && overlapsWater(h.x + k.offset.x, h.x + k.offset.x + k.size.x, h.y + k.offset.y, h.y + k.offset.y + k.size.y) ? 0.35 : 1);
         var d = void 0;
         let p;
         Math.abs(c.wa.x) >= Math.abs(c.wa.y) ? p = d = 1 <= Math.abs(c.j.x) : d = p = 1 <= Math.abs(c.j.y);
-        // Falling and pushable blocks treat water and one-ways as solid
-        // geometry: water is a full block to other blocks. Characters swim.
+        // Pushable blocks treat water and one-ways as solid geometry.
+        // Falling blocks sink through water at reduced speed. Characters swim.
         const gBlocks = g.Rc.has(mj) || g.Rc.has(hj);
         for (var e = 0, f = 0; d && 1 <= Math.abs(c.j.x); ) {
           const q = rl(c.j.x);
@@ -8759,7 +8796,7 @@
           h.x += q;
           c.j.x -= q;
           this.j.set(h, k);
-          for (const t of b) if (t !== g && t.O === this.O && -1 === m.indexOf(t)) { const oneWay = t.Rc.has(OneWayBlock); if ((!oneWay || gBlocks) && (!t.Rc.has(WaterBlock) || gBlocks) && xl(this.j, t.oe, t.le)) { this.o(this.O, q, 0, g, t); this.j.set(h, k); } }
+          for (const t of b) if (t !== g && t.O === this.O && -1 === m.indexOf(t)) { const oneWay = t.Rc.has(OneWayBlock); if ((!oneWay || gBlocks) && (!t.Rc.has(WaterBlock) || g.Rc.has(hj)) && xl(this.j, t.oe, t.le)) { this.o(this.O, q, 0, g, t); this.j.set(h, k); } }
         }
         for (e = d = 0; p && 1 <= Math.abs(c.j.y); ) {
           f = rl(c.j.y);
@@ -8769,11 +8806,10 @@
           h.y += f;
           c.j.y -= f;
           this.j.set(h, k);
-          for (const q of b) if (q !== g && q.O === this.O && -1 === m.indexOf(q)) { const oneWay = q.Rc.has(OneWayBlock); const water = q.Rc.has(WaterBlock); const qTop = q.oe.y + q.le.offset.y; const priorBottom = h.y - f + k.offset.y + k.size.y; // Pressing down slips a character straight through a one-way platform:
-          // jump it below the platform's underside so no catch-up can reseat it.
-          const dropping = oneWay && !gBlocks && 0 < f && Date.now() < _oneWayDropUntil && priorBottom <= qTop + 2.5;
-          if (dropping) { h.y = qTop + q.le.size.y + 0.1 - k.offset.y; c.j.y = 0; c.wa.y = Math.max(0, c.wa.y); this.j.set(h, k); continue; }
-          if ((!water || gBlocks) && (!oneWay || gBlocks || (f > 0 && priorBottom <= qTop + 0.6)) && xl(this.j, q.oe, q.le)) { this.o(this.O, 0, f, g, q); this.j.set(h, k); } }
+          for (const q of b) if (q !== g && q.O === this.O && -1 === m.indexOf(q)) { const oneWay = q.Rc.has(OneWayBlock); const water = q.Rc.has(WaterBlock); const qTop = q.oe.y + q.le.offset.y; const priorBottom = h.y - f + k.offset.y + k.size.y; // Holding down makes a character slip through a one-way platform: while
+          // pressed, the platform simply stops catching them and gravity takes over.
+          const dropping = oneWay && !gBlocks && 0 < f && Date.now() < _oneWayDropUntil;
+          if ((!water || g.Rc.has(hj)) && (!oneWay || gBlocks || ((f > 0 && priorBottom <= qTop + 0.6) && !dropping)) && xl(this.j, q.oe, q.le)) { this.o(this.O, 0, f, g, q); this.j.set(h, k); } }
         }
       }
     }
@@ -9041,8 +9077,8 @@ class wl {
     ctx.restore();
   }
   var T = new Map;
-  T.set(33, (a, b) => new x(new P(new C(a, b), 0, new C(O, O)), new D(new Na(drawWaterBlock), 0), new R(new C(16, 16)), new WaterBlock));
-  T.set(30, (a, b) => new x(new P(new C(a, b), 0, new C(O, O)), new D(new Na(drawMovingBlock), 0), new R(new C(16, 16)), new MovingBlock(a, a - 48, a + 48)));
+  T.set(33, (a, b) => new x(new P(new C(a, b), 0, new C(O, O)), new D(new Na(drawWaterBlock), - 0.5), new R(new C(16, 16)), new WaterBlock));
+  T.set(30, (a, b) => new x(new P(new C(a, b), 0, new C(O, O)), new D(new Na(drawMovingBlock), 1), new R(new C(16, 16)), new MovingBlock(a, a - 48, a + 48)));
   T.set(31, (a, b) => new x(new P(new C(a, b), 0, new C(O, O)), new D(new Na(drawOneWayBlock), 0), new R(new C(16, 8)), new OneWayBlock));
   T.set(32, (a, b) => new x(new P(new C(a, b), 0, new C(O, O)), new D(new Na(drawCrumblingBlock), 0), new R(new C(16, 16)), new CrumblingBlock));
   T.set(5, (a, b) =>{
