@@ -8646,18 +8646,23 @@
           const oL = op.x + oh.offset.x, oR = oL + oh.size.x;
           const plNow = platformPos.x + platformHit.offset.x, prNow = plNow + platformHit.size.x;
           if (oR <= plNow + 0.001 || oL >= prNow - 0.001) continue;
-          // Push the character until it clears the platform box (or a wall stops it).
-          let push = allowedDelta > 0 ? prNow - oL : plNow - oR;
+          // Push the character straight out of whichever face of the platform
+          // they are on (away from its center). Pushing along the platform's
+          // travel direction would drag a character that walked into the
+          // trailing face clean through the platform and into the block
+          // behind it.
+          const platCenter = (plNow + prNow) / 2;
+          let push = (oL + oR) / 2 < platCenter ? plNow - oR : prNow - oL;
           for (const wall of walls) {
             if (wall === entity || wall === other || riders.includes(wall) || !wall.get(P) || !wall.get(R)) continue;
             const wp = wall.get(P).position, wh = wall.get(R);
             const wT = wp.y + wh.offset.y, wB = wT + wh.size.y;
             if (oB <= wT + 0.5 || oT >= wB - 0.5) continue;
             const wL = wp.x + wh.offset.x, wR = wL + wh.size.x;
-            if (allowedDelta > 0 && oR <= wL + 0.5) push = Math.min(push, wL - oR);
-            else if (allowedDelta < 0 && oL >= wR - 0.5) push = Math.max(push, wR - oL);
+            if (0 < push && oR <= wL + 0.5) push = Math.min(push, wL - oR);
+            else if (0 > push && oL >= wR - 0.5) push = Math.max(push, wR - oL);
           }
-          push = allowedDelta > 0 ? Math.max(0, push) : Math.min(0, push);
+          push = 0 < push ? Math.max(0, push) : Math.min(0, push);
           op.x += push;
           const nL = op.x + oh.offset.x, nR = nL + oh.size.x;
           const pl2 = platformPos.x + platformHit.offset.x, pr2 = pl2 + platformHit.size.x;
@@ -17040,6 +17045,7 @@ class wl {
     oneWayBlock: 'tool_one_way_block',
     crumblingBlock: 'tool_crumbling_block',
     waterBlock: 'tool_water_block',
+    iceBlock: 'tool_ice_block',
     breakable: 'tool_breakable',
     goal: 'tool_goal',
     coin: 'tool_coin',
@@ -17535,17 +17541,22 @@ class wl {
             const kp = k.get(P).position, kr = k.get(R);
             const feetB = kp.y + kr.offset.y + kr.size.y;
             const feetL = kp.x + kr.offset.x, feetR = feetL + kr.size.x;
+            // Only the tile under the CENTER of the feet counts, so standing
+            // on a normal block next to (or stacked on) ice never slides.
+            const feetCenter = (feetL + feetR) / 2;
             k.__ice = this.O.find(IceBlock, P, R).some(w => {
               const ip = w.get(P).position, ir = w.get(R);
               const iT = ip.y + ir.offset.y, iL = ip.x + ir.offset.x, iRt = iL + ir.size.x;
-              return Math.abs(iT - feetB) <= 0.6 && iRt > feetL + 1 && iL < feetR - 1;
+              return Math.abs(iT - feetB) <= 0.6 && iRt > feetCenter && iL < feetCenter;
             });
           }
           if (k.__ice) {
             m.x = ql(- 0.11, 0.11, m.x * Math.pow(0.999, a) + 0.0002 * g * a);
             0 > m.x && (p.j = !0); 0 < m.x && (p.j = !1);
             m.y += 0.0008 * a; m.y = Math.min(m.y, 0.3);
-            f && p.o && !p.bc && (m.y = -0.26); os(k, p, m); p.o = !1;
+            f && p.o && !p.bc && (m.y = -0.26);
+            // Gliding with no keys held shows the idle pose, not a run.
+            os(k, p, 0 === g ? { x: 0, y: m.y } : m); p.o = !1;
           } else {
             m.x = 0.1 * g; 0 > m.x && (p.j = !0); 0 < m.x && (p.j = !1);
             m.y += 0.0008 * a; m.y = Math.min(m.y, 0.3);
