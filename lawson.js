@@ -8566,8 +8566,10 @@
       // Platforms only stop against real solid geometry. Characters (S), water,
       // one-ways, pickups, triggers and currently-open blink gates are not walls.
       const isPlatformWall = other => {
-        if (other.Rc.has(S)) return false;
-        if (other.Rc.has(WaterBlock) || other.Rc.has(OneWayBlock)) return false;
+        // Characters (player, enemies) are not walls: the platform shoves them.
+        // Every block type is a real wall to the platform: solids, water,
+        // one-ways, crumble, pushable, falling and closed blink gates.
+        if (other.Rc.has(S)) return other.Rc.has(hj) || other.Rc.has(mj);
         if (other.Rc.has(tj) || other.Rc.has(uj) || other.Rc.has(vj) || other.Rc.has(ej)) return false;
         if (other.Rc.has(jj) || other.Rc.has(nj) || other.Rc.has(rj) || other.Rc.has(sj)) return false;
         if (other.Rc.has(oj) && true === other.get(oj).Yc) return false;
@@ -8617,6 +8619,42 @@
         // that a wall would block is simply left behind and falls off the side;
         // the platform itself never stops or turns for a rider.
         platformPos.x += allowedDelta;
+        // The platform is solid to characters too: it can never pass through
+        // the player or enemies standing in its path. It shoves them along,
+        // and if a wall pins them the platform stops at their edge and turns.
+        if (allowedDelta) for (const other of allSolid) {
+          if (other === entity || !other.Rc.has(S) || riders.includes(other)) continue;
+          if (other.Rc.has(mj) || other.Rc.has(hj)) continue; // blocks are walls, already handled
+          const op = other.get(P).position, oh = other.get(R);
+          if (!oh) continue;
+          const oT = op.y + oh.offset.y, oB = oT + oh.size.y;
+          if (oB <= top + 0.5 || oT >= bottom - 0.5) continue;
+          const oL = op.x + oh.offset.x, oR = oL + oh.size.x;
+          const plNow = platformPos.x + platformHit.offset.x, prNow = plNow + platformHit.size.x;
+          if (oR <= plNow + 0.001 || oL >= prNow - 0.001) continue;
+          // Push the character until it clears the platform box (or a wall stops it).
+          let push = allowedDelta > 0 ? prNow - oL : plNow - oR;
+          for (const wall of walls) {
+            if (wall === entity || wall === other || riders.includes(wall) || !wall.get(P) || !wall.get(R)) continue;
+            const wp = wall.get(P).position, wh = wall.get(R);
+            const wT = wp.y + wh.offset.y, wB = wT + wh.size.y;
+            if (oB <= wT + 0.5 || oT >= wB - 0.5) continue;
+            const wL = wp.x + wh.offset.x, wR = wL + wh.size.x;
+            if (allowedDelta > 0 && oR <= wL + 0.5) push = Math.min(push, wL - oR);
+            else if (allowedDelta < 0 && oL >= wR - 0.5) push = Math.max(push, wR - oL);
+          }
+          push = allowedDelta > 0 ? Math.max(0, push) : Math.min(0, push);
+          op.x += push;
+          const nL = op.x + oh.offset.x, nR = nL + oh.size.x;
+          const pl2 = platformPos.x + platformHit.offset.x, pr2 = pl2 + platformHit.size.x;
+          if (nR > pl2 + 0.001 && nL < pr2 - 0.001) {
+            // Pinned against a wall: the platform stops at the character's edge.
+            platformPos.x = allowedDelta > 0
+              ? Math.min(platformPos.x, nL - platformHit.offset.x - platformHit.size.x)
+              : Math.max(platformPos.x, nR - platformHit.offset.x);
+            allowedDelta = platformPos.x - startX;
+          }
+        }
         if (Math.abs(allowedDelta - frameDelta) > 0.001) block.direction *= -1;
         if (allowedDelta) for (const rider of riders) {
           const rp = rider.get(P).position, rh = rider.get(R);
@@ -8652,7 +8690,8 @@
             // each step or the landing check compares against stale bounds.
             const curTop = pos.y + hit.offset.y, curBot = curTop + hit.size.y;
             for (const other of crumbleSolids) {
-              if (other === entity || other.Rc.has(WaterBlock)) continue;
+              // Water is a full block to other blocks: the crumble rests on it.
+              if (other === entity) continue;
               if (other.Rc.has(oj) && true === other.get(oj).Yc) continue;
               const op = other.get(P).position, oh = other.get(R);
               const oTop = op.y + oh.offset.y, oBot = oTop + oh.size.y;
@@ -8673,7 +8712,7 @@
           // (e.g. a moving platform sliding out), it resumes falling.
           let supported = false;
           for (const other of crumbleSolids) {
-            if (other === entity || other.Rc.has(WaterBlock)) continue;
+            if (other === entity) continue;
             if (other.Rc.has(oj) && true === other.get(oj).Yc) continue;
             const op = other.get(P).position, oh = other.get(R);
             const oTop = op.y + oh.offset.y, oBot = oTop + oh.size.y;
@@ -8709,6 +8748,9 @@
         var d = void 0;
         let p;
         Math.abs(c.wa.x) >= Math.abs(c.wa.y) ? p = d = 1 <= Math.abs(c.j.x) : d = p = 1 <= Math.abs(c.j.y);
+        // Falling and pushable blocks treat water and one-ways as solid
+        // geometry: water is a full block to other blocks. Characters swim.
+        const gBlocks = g.Rc.has(mj) || g.Rc.has(hj);
         for (var e = 0, f = 0; d && 1 <= Math.abs(c.j.x); ) {
           const q = rl(c.j.x);
           if (h.x === e && q === f) throw Error('O');
@@ -8717,7 +8759,7 @@
           h.x += q;
           c.j.x -= q;
           this.j.set(h, k);
-          for (const t of b) if (t !== g && t.O === this.O && -1 === m.indexOf(t)) { const oneWay = t.Rc.has(OneWayBlock); if (!oneWay && !t.Rc.has(WaterBlock) && xl(this.j, t.oe, t.le)) { this.o(this.O, q, 0, g, t); this.j.set(h, k); } }
+          for (const t of b) if (t !== g && t.O === this.O && -1 === m.indexOf(t)) { const oneWay = t.Rc.has(OneWayBlock); if ((!oneWay || gBlocks) && (!t.Rc.has(WaterBlock) || gBlocks) && xl(this.j, t.oe, t.le)) { this.o(this.O, q, 0, g, t); this.j.set(h, k); } }
         }
         for (e = d = 0; p && 1 <= Math.abs(c.j.y); ) {
           f = rl(c.j.y);
@@ -8727,7 +8769,11 @@
           h.y += f;
           c.j.y -= f;
           this.j.set(h, k);
-          for (const q of b) if (q !== g && q.O === this.O && -1 === m.indexOf(q)) { const oneWay = q.Rc.has(OneWayBlock); const water = q.Rc.has(WaterBlock); const qTop = q.oe.y + q.le.offset.y; const priorBottom = h.y - f + k.offset.y + k.size.y; if (!water && (!oneWay || (f > 0 && priorBottom <= qTop + 0.6)) && xl(this.j, q.oe, q.le)) { this.o(this.O, 0, f, g, q); this.j.set(h, k); } }
+          for (const q of b) if (q !== g && q.O === this.O && -1 === m.indexOf(q)) { const oneWay = q.Rc.has(OneWayBlock); const water = q.Rc.has(WaterBlock); const qTop = q.oe.y + q.le.offset.y; const priorBottom = h.y - f + k.offset.y + k.size.y; // Pressing down slips a character straight through a one-way platform:
+          // jump it below the platform's underside so no catch-up can reseat it.
+          const dropping = oneWay && !gBlocks && 0 < f && Date.now() < _oneWayDropUntil && priorBottom <= qTop + 2.5;
+          if (dropping) { h.y = qTop + q.le.size.y + 0.1 - k.offset.y; c.j.y = 0; c.wa.y = Math.max(0, c.wa.y); this.j.set(h, k); continue; }
+          if ((!water || gBlocks) && (!oneWay || gBlocks || (f > 0 && priorBottom <= qTop + 0.6)) && xl(this.j, q.oe, q.le)) { this.o(this.O, 0, f, g, q); this.j.set(h, k); } }
         }
       }
     }
@@ -8748,7 +8794,8 @@
     m = Math.max(d.y, a.y);
     return Math.min(b.x, c.x) < Math.max(d.x, a.x) && h < e && f < m && k < g
   }
-  class wl {
+  let _oneWayDropUntil = 0;
+class wl {
     constructor() {
       this.o = new C(0, 0);
       this.v = new C(0, 0);
@@ -8883,6 +8930,7 @@
   // Water is a seamless, animated volume: it has no solid collision surface.
   var WaterBlock = class extends u {};
   var _waterCacheT = -1, _waterCacheList = null;
+  let _waterHalf = null;
   function drawWaterBlock(ctx, entity) {
     ctx.save(); ctx.imageSmoothingEnabled = false;
     // Clip all animation to this tile so no ripple or bubble can draw beyond its edges.
@@ -8907,12 +8955,6 @@
       waterAbove = _waterCacheList.some(w => Math.abs(w[2] - top) < 1.5 && w[0] < left + rect.size.x && w[1] > left);
     }
     const wp = (THEME_WATER[Qg] || THEME_WATER[1]);
-    ctx.fillStyle = wp[1]; ctx.fillRect(0, 0, 48, 48);
-    // Only exposed water surfaces get a darker top; stacked tiles stay visually continuous.
-    if (!waterAbove) {
-      ctx.fillStyle = wp[0]; ctx.fillRect(0, 0, 48, 4);
-      ctx.fillStyle = wp[2]; ctx.fillRect(0, 4, 48, 2);
-    }
     // Per-tile seeded randomness: every water tile gets its own ripples and
     // its own bubble field instead of all tiles sharing one repeating pattern.
     let seed = (Math.round((entity && entity.Rc && entity.Rc.has(P)) ? entity.get(P).position.x : 0) * 73856093
@@ -8921,6 +8963,52 @@
     let sstate = seed;
     const rnd = () => { sstate ^= sstate << 13; sstate >>>= 0; sstate ^= sstate >>> 17; sstate ^= sstate << 5; sstate >>>= 0; return sstate / 4294967296; };
     const bandPhase = rnd() * 6.283;
+    if (1 === Qg) {
+      // The 8-bit style renders water at HALF resolution and upscales 2x, so
+      // every wave and bubble pixel is twice as chunky as in other themes.
+      if (!_waterHalf) { _waterHalf = document.createElement('canvas'); _waterHalf.width = 24; _waterHalf.height = 24; }
+      const hc = _waterHalf.getContext('2d');
+      hc.imageSmoothingEnabled = false;
+      hc.clearRect(0, 0, 24, 24);
+      hc.fillStyle = wp[1]; hc.fillRect(0, 0, 24, 24);
+      if (!waterAbove) {
+        hc.fillStyle = wp[0]; hc.fillRect(0, 0, 24, 2);
+        hc.fillStyle = wp[2]; hc.fillRect(0, 2, 24, 1);
+      }
+      hc.fillStyle = wp[3];
+      for (let band = 0; band < 3; band++) {
+        const bandOff = rnd() * 6.283;
+        for (let x = 0; x < 24; x += 2) {
+          const wave = Math.sin((x / 24) * Math.PI * 4 + t * (1.7 + band * 0.31 + rnd() * 0.2) + band * 1.9 + bandPhase + bandOff) * 1.5;
+          if ((Math.floor(x / 2) + band) % 3 !== 0) {
+            const y = Math.max(4, Math.min(23, 4 + band * 8 + Math.round(wave)));
+            hc.fillRect(x, y, Math.min(2, 24 - x), 1);
+          }
+        }
+      }
+      hc.fillStyle = wp[4];
+      for (let i = 0; i < 4; i++) {
+        const bx = 1 + rnd() * 21;
+        const rise = 3.5 + rnd() * 3.5;
+        const phase = rnd() * 23;
+        const wobble = 1 + rnd() * 1.5;
+        const wfreq = 0.8 + rnd() * 1.6;
+        const size = 1 + (rnd() > 0.5 ? 1 : 0);
+        const cyc = (t * rise + phase) % 23;
+        const y = 24 - size - cyc;
+        const x = Math.max(0, Math.min(24 - size, bx + Math.sin(t * wfreq + phase) * wobble));
+        hc.fillRect(Math.round(x), Math.round(y), size, size);
+      }
+      ctx.drawImage(_waterHalf, 0, 0, 24, 24, 0, 0, 48, 48);
+      ctx.restore();
+      return;
+    }
+    ctx.fillStyle = wp[1]; ctx.fillRect(0, 0, 48, 48);
+    // Only exposed water surfaces get a darker top; stacked tiles stay visually continuous.
+    if (!waterAbove) {
+      ctx.fillStyle = wp[0]; ctx.fillRect(0, 0, 48, 4);
+      ctx.fillStyle = wp[2]; ctx.fillRect(0, 4, 48, 2);
+    }
     ctx.fillStyle = wp[3];
     for (let band = 0; band < 3; band++) {
       const bandOff = rnd() * 6.283;
@@ -16788,20 +16876,24 @@
   // icons; these match that pattern so the new tools read like native ones.
   // In-game the blocks themselves are drawn by the theme-aware draw functions.
   function blockToolIcon(tool, mode) {
-    const art = {
-      movingBlock: p => `<rect x="3" y="6" width="14" height="9" fill="${p.o}"/><rect x="4" y="7" width="12" height="7" fill="${p.m}"/><rect x="4" y="7" width="12" height="2" fill="${p.l}"/><rect x="6" y="10" width="2" height="2" fill="${p.o}"/><rect x="12" y="10" width="2" height="2" fill="${p.o}"/><rect x="2" y="9" width="1" height="1" fill="${p.m}"/><rect x="1" y="10" width="1" height="1" fill="${p.m}"/><rect x="0" y="11" width="1" height="1" fill="${p.m}"/><rect x="17" y="9" width="1" height="1" fill="${p.m}"/><rect x="18" y="10" width="1" height="1" fill="${p.m}"/><rect x="19" y="11" width="1" height="1" fill="${p.m}"/>`,
-      oneWayBlock: p => `<rect x="2" y="10" width="16" height="6" fill="${p.o}"/><rect x="3" y="11" width="14" height="4" fill="${p.m}"/><rect x="3" y="11" width="14" height="1" fill="${p.l}"/><rect x="9" y="2" width="2" height="1" fill="${p.m}"/><rect x="8" y="3" width="4" height="1" fill="${p.m}"/><rect x="7" y="4" width="6" height="1" fill="${p.m}"/><rect x="9" y="5" width="2" height="4" fill="${p.m}"/>`,
-      crumblingBlock: p => `<rect x="2" y="2" width="16" height="13" fill="${p.o}"/><rect x="3" y="3" width="14" height="11" fill="${p.m}"/><rect x="3" y="3" width="14" height="2" fill="${p.l}"/><rect x="10" y="3" width="1" height="2" fill="${p.o}"/><rect x="9" y="5" width="1" height="2" fill="${p.o}"/><rect x="10" y="7" width="1" height="2" fill="${p.o}"/><rect x="9" y="9" width="1" height="2" fill="${p.o}"/><rect x="10" y="11" width="1" height="3" fill="${p.o}"/><rect x="5" y="16" width="2" height="1" fill="${p.m}"/><rect x="12" y="17" width="2" height="1" fill="${p.m}"/><rect x="8" y="18" width="1" height="1" fill="${p.m}"/>`,
-      waterBlock: p => `<rect x="1" y="3" width="18" height="14" fill="${p.o}"/><rect x="2" y="4" width="16" height="12" fill="${p.m}"/><rect x="2" y="4" width="16" height="1" fill="${p.l}"/><rect x="3" y="8" width="3" height="1" fill="${p.l}"/><rect x="8" y="7" width="3" height="1" fill="${p.l}"/><rect x="13" y="8" width="3" height="1" fill="${p.l}"/><rect x="4" y="11" width="3" height="1" fill="${p.l}"/><rect x="10" y="10" width="3" height="1" fill="${p.l}"/><rect x="6" y="13" width="2" height="2" fill="${p.l}"/><rect x="12" y="12" width="1" height="1" fill="${p.l}"/><rect x="14" y="14" width="2" height="1" fill="${p.l}"/>`
-    }[tool];
-    if (!art) return '';
+    // Frame colors sampled from the native tool icons: black+light-gray idle,
+    // magenta+gold hover, magenta+salmon pressed.
     const palettes = [
-      { o: '#000000', m: '#9c8fae', l: '#e1d6e4' },
-      { o: '#3c19aa', m: '#be008c', l: '#ffda7c' },
-      { o: '#9c8fae', m: '#e1d6e4', l: '#ffffff' }
+      { f1: '#000000', f2: '#e1d6e4', o: '#000000', m: '#9c8fae', l: '#e1d6e4' },
+      { f1: '#be008c', f2: '#ffda7c', o: '#3c19aa', m: '#be008c', l: '#ffda7c' },
+      { f1: '#be008c', f2: '#ff6158', o: '#9c8fae', m: '#e1d6e4', l: '#ffffff' }
     ];
     const p = palettes[mode] || palettes[0];
-    return `url("data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" shape-rendering="crispEdges">${art(p)}</svg>`)}") center / contain no-repeat`;
+    // Native tools draw their art inside a 2px square frame; match that.
+    const frame = `<rect x="0" y="0" width="20" height="20" fill="${p.f1}"/><rect x="1" y="1" width="18" height="18" fill="${p.f2}"/>`;
+    const art = {
+      movingBlock: p => `<rect x="4" y="8" width="12" height="7" fill="${p.o}"/><rect x="5" y="9" width="10" height="5" fill="${p.m}"/><rect x="5" y="9" width="10" height="1" fill="${p.l}"/><rect x="6" y="11" width="2" height="2" fill="${p.o}"/><rect x="12" y="11" width="2" height="2" fill="${p.o}"/><rect x="2" y="10" width="1" height="3" fill="${p.m}"/><rect x="17" y="10" width="1" height="3" fill="${p.m}"/>`,
+      oneWayBlock: p => `<rect x="3" y="12" width="14" height="4" fill="${p.o}"/><rect x="4" y="13" width="12" height="2" fill="${p.m}"/><rect x="4" y="13" width="12" height="1" fill="${p.l}"/><rect x="9" y="4" width="2" height="1" fill="${p.m}"/><rect x="8" y="5" width="4" height="1" fill="${p.m}"/><rect x="7" y="6" width="6" height="1" fill="${p.m}"/><rect x="9" y="7" width="2" height="4" fill="${p.m}"/>`,
+      crumblingBlock: p => `<rect x="4" y="4" width="12" height="11" fill="${p.o}"/><rect x="5" y="5" width="10" height="9" fill="${p.m}"/><rect x="5" y="5" width="10" height="1" fill="${p.l}"/><rect x="9" y="5" width="1" height="2" fill="${p.o}"/><rect x="10" y="7" width="1" height="2" fill="${p.o}"/><rect x="9" y="9" width="1" height="2" fill="${p.o}"/><rect x="10" y="11" width="1" height="3" fill="${p.o}"/><rect x="6" y="16" width="2" height="1" fill="${p.m}"/><rect x="12" y="16" width="2" height="1" fill="${p.m}"/><rect x="9" y="17" width="1" height="1" fill="${p.m}"/>`,
+      waterBlock: p => `<rect x="3" y="4" width="14" height="13" fill="${p.o}"/><rect x="4" y="5" width="12" height="11" fill="${p.m}"/><rect x="4" y="5" width="12" height="1" fill="${p.l}"/><rect x="5" y="8" width="3" height="1" fill="${p.l}"/><rect x="10" y="7" width="3" height="1" fill="${p.l}"/><rect x="13" y="9" width="2" height="1" fill="${p.l}"/><rect x="6" y="11" width="3" height="1" fill="${p.l}"/><rect x="11" y="11" width="2" height="1" fill="${p.l}"/><rect x="7" y="14" width="2" height="1" fill="${p.l}"/><rect x="12" y="14" width="2" height="1" fill="${p.l}"/>`
+    }[tool];
+    if (!art) return '';
+    return `url("data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" shape-rendering="crispEdges">${frame}${art(p)}</svg>`)}") center / contain no-repeat`;
   }
   var Or = {
     playerPlatformer: 2,
@@ -17793,7 +17885,7 @@
       this.v = {
       };
       a.addEventListener('keydown', b=>{
-        b.code in this.o && (b.preventDefault(), this.v[b.code] = !0, this.j[this.o[b.code]] = !0)
+        b.code in this.o && (b.preventDefault(), this.v[b.code] = !0, this.j[this.o[b.code]] = !0, 1 === this.o[b.code] && (_oneWayDropUntil = Date.now() + 250))
       });
       a.addEventListener('keyup', b=>{
         this.v[b.code] = !1;
@@ -18029,7 +18121,9 @@
         On(0);
         Cj();
         Ur(this);
-        gt(this)
+        // Restarting while a pause/game-over modal lingers in the editor must
+        // not re-enable the game systems: the world only runs on play screens.
+        'play' === a.screen || 'tutorial' === a.screen ? gt(this) : this.pause()
       });
       ft(this);
       ht(this);
@@ -18188,8 +18282,7 @@
           'movingBlock',
           'oneWayBlock',
           'crumblingBlock',
-          'waterBlock',
-          'fallingSolid'
+          'waterBlock'
         ],
         [
           'goal',
