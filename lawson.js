@@ -17700,8 +17700,12 @@ class wl {
   var shakeT = 0, shakeMag = 0;
   function addShake(mag, ms) { shakeMag = Math.max(shakeMag, mag); shakeT = Math.max(shakeT, ms); }
   function puff(world, art, px, py, vx, vy, w, h, life) {
+    // No R/S: particles never join the solid list (they used to act as tiny
+    // invisible walls that stopped the player mid-stride) and are moved by
+    // the particle system instead of the collision movement loop.
     const comps = 'function' === typeof art ? [new D(new Na(art), 0)] : co(art);
-    const e = new x(new gj, new lj, new P(new C(px, py), 0, new C(O, O)), ...comps, new R(new C(w, h)), new S(new C(vx, vy)));
+    const e = new x(new gj, new lj, new P(new C(px, py), 0, new C(O, O)), ...comps);
+    e.__pv = new C(vx, vy);
     e.get(D).__life = life;
     Ba(world, e);
   }
@@ -17713,13 +17717,18 @@ class wl {
         const ip = w.get(P).position;
         puff(this.O, drawIceGlint, ip.x + 2 + 12 * Math.random(), ip.y - 1, 0, -0.006, 4, 4, 420);
       }
-      // Short-lived particles fade out and are removed.
+      // Short-lived particles drift, fade out and are removed.
       for (const e of this.O.find(D, P)) {
         const d = e.get(D);
         if (void 0 === d.__life) continue;
         d.__age = (d.__age || 0) + a;
         if (d.__age >= d.__life) { z(this.O, e); continue; }
         d.alpha = 1 - d.__age / d.__life;
+        if (e.__pv) {
+          const pos = e.get(P).position;
+          pos.x += e.__pv.x * a;
+          pos.y += e.__pv.y * a;
+        }
       }
     }
   };
